@@ -7,6 +7,8 @@ import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
 import { mockConversations, mockUsers } from '@/lib/mock-data'
 import type { CurrentUser, Conversation, User } from '@/lib/types'
 import type { UserFormData } from '@/components/onboarding/auth-form-refactored'
+import { getCurrentUser, updateUserProfile } from '@/lib/supabase/auth'
+import { uploadProfilePhoto, uploadCoverPhoto } from '@/lib/supabase/storage'
 
 export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
@@ -20,66 +22,113 @@ export default function Home() {
 
   // Check for existing user session
   useEffect(() => {
-    const savedUser = localStorage.getItem('phantom-user')
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser))
-      } catch {
-        localStorage.removeItem('phantom-user')
+    const loadUser = async () => {
+      // Try to get user from Supabase first
+      const supabaseUser = await getCurrentUser()
+      
+      if (supabaseUser) {
+        setUser(supabaseUser)
+      } else {
+        // Fallback to localStorage
+        const savedUser = localStorage.getItem('phantom-user')
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser))
+          } catch {
+            localStorage.removeItem('phantom-user')
+          }
+        }
+      }
+      
+      // Load conversations
+      const savedConvs = localStorage.getItem('phantom-conversations')
+      if (savedConvs) {
+        try {
+          setConversations(JSON.parse(savedConvs))
+        } catch {}
+      } else {
+        setConversations(mockConversations)
+      }
+
+      // Load contacts
+      const savedContacts = localStorage.getItem('phantom-contacts')
+      if (savedContacts) {
+        try {
+          setContacts(JSON.parse(savedContacts))
+        } catch {}
+      }
+
+      // Load and apply theme
+      const savedTheme = localStorage.getItem('phantom-theme') || 'teal'
+      document.documentElement.setAttribute('data-theme', savedTheme)
+
+      // Listen for theme changes
+      const handleStorage = (e: StorageEvent) => {
+        if (e.key === 'phantom-theme' && e.newValue) {
+          document.documentElement.setAttribute('data-theme', e.newValue)
+        }
+      }
+      window.addEventListener('storage', handleStorage)
+
+      setIsLoading(false)
+
+      return () => {
+        window.removeEventListener('storage', handleStorage)
       }
     }
     
-    // Load conversations
-    const savedConvs = localStorage.getItem('phantom-conversations')
-    if (savedConvs) {
-      try {
-        setConversations(JSON.parse(savedConvs))
-      } catch {}
-    } else {
-      setConversations(mockConversations)
-    }
-
-    // Load contacts
-    const savedContacts = localStorage.getItem('phantom-contacts')
-    if (savedContacts) {
-      try {
-        setContacts(JSON.parse(savedContacts))
-      } catch {}
-    }
-
-    // Load and apply theme
-    const savedTheme = localStorage.getItem('phantom-theme') || 'teal'
-    document.documentElement.setAttribute('data-theme', savedTheme)
-
-    // Listen for theme changes
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'phantom-theme' && e.newValue) {
-        document.documentElement.setAttribute('data-theme', e.newValue)
-      }
-    }
-    window.addEventListener('storage', handleStorage)
-
-    setIsLoading(false)
-
-    return () => {
-      window.removeEventListener('storage', handleStorage)
-    }
+    loadUser()
   }, [])
 
-  const handleOnboardingComplete = (userData: UserFormData) => {
-    const newUser: CurrentUser = {
-      id: 'current-user',
-      name: userData.name || 'Usuario',
-      nickname: userData.nickname || 'usuario',
-      email: userData.email,
-      phone: userData.phone || '',
-      avatar: userData.profilePhoto || '',
-      profilePhoto: userData.profilePhoto,
-      coverPhoto: userData.coverPhoto || undefined,
-      isOnline: true,
+  const handleOnboardingComplete = async (userData: UserFormData) => {
+    const currentUserData = await getCurrentUser()
+    
+    if (currentUserData) {
+      // Upload photos to Supabase if provided
+      let profilePhotoUrl = userData.profilePhoto
+      let coverPhotoUrl = userData.coverPhoto
+      
+      if (userData.profilePhoto && userData.profilePhoto.startsWith('data:')) {
+        const uploadedUrl = await uploadProfilePhoto(currentUserData.id, userData.profilePhoto)
+        if (uploadedUrl) profilePhotoUrl = uploadedUrl
+      }
+      
+      if (userData.coverPhoto && userData.coverPhoto.startsWith('data:')) {
+        const uploadedUrl = await uploadCoverPhoto(currentUserData.id, userData.coverPhoto)
+        if (uploadedUrl) coverPhotoUrl = uploadedUrl
+      }
+      
+      // Update user profile with photos
+      await updateUserProfile(currentUserData.id, {
+        ...currentUserData,
+        profilePhoto: profilePhotoUrl,
+        coverPhoto: coverPhotoUrl,
+      })
+      
+      const newUser: CurrentUser = {
+        ...currentUserData,
+        profilePhoto: profilePhotoUrl,
+        coverPhoto: coverPhotoUrl,
+      }
+      
+      setUser(newUser)
+      localStorage.setItem('phantom-user', JSON.stringify(newUser))
+    } else {
+      // Fallback to old behavior if Supabase fails
+      const newUser: CurrentUser = {
+        id: 'current-user',
+        name: userData.name || 'Usuario',
+        nickname: userData.nickname || 'usuario',
+        email: userData.email,
+        phone: userData.phone || '',
+        avatar: userData.profilePhoto || '',
+        profilePhoto: userData.profilePhoto,
+        coverPhoto: userData.coverPhoto || undefined,
+        isOnline: true,
+      }
+      setUser(newUser)
+      localStorage.setItem('phantom-user', JSON.stringify(newUser))
     }
-    setUser(newUser)
-    localStorage.setItem('phantom-user', JSON.stringify(newUser))
     
     // Also save to global phantom-users list for uniqueness check
     const storedUsersStr = localStorage.getItem('phantom-users')
@@ -87,15 +136,26 @@ export default function Home() {
     if (storedUsersStr) {
        try { storedUsers = JSON.parse(storedUsersStr) } catch {}
     }
-    if (!storedUsers.some((u: any) => u.nickname === newUser.nickname)) {
-       storedUsers.push(newUser)
+    const newUserForList = {
+      id: 'current-user',
+      name: userData.name || 'Usuario',
+      nickname: userData.nickname || 'usuario',
+      email: userData.email,
+    }
+    if (!storedUsers.some((u: any) => u.nickname === newUserForList.nickname)) {
+       storedUsers.push(newUserForList)
        localStorage.setItem('phantom-users', JSON.stringify(storedUsers))
     }
   }
 
-  const handleUpdateUser = (updatedUser: CurrentUser) => {
+  const handleUpdateUser = async (updatedUser: CurrentUser) => {
     setUser(updatedUser)
     localStorage.setItem('phantom-user', JSON.stringify(updatedUser))
+    
+    // Update in Supabase
+    if (updatedUser.id) {
+      await updateUserProfile(updatedUser.id, updatedUser)
+    }
   }
 
   const handleLogout = () => {

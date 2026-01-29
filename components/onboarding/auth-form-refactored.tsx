@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
 import { mockUsers } from '@/lib/mock-data'
+import { signUp, signIn } from '@/lib/supabase/auth'
+import { toast } from 'sonner'
 
 // Schema Definitions
 const step1Schema = z.object({
@@ -123,6 +125,15 @@ export function AuthForm({ onComplete, onBack }: AuthFormProps) {
     if (mode === 'login') {
       const isValid = await trigger(['email', 'password'])
       if (isValid) {
+        setLoading(true)
+        const { data, error } = await signIn(formData.email, formData.password)
+        setLoading(false)
+        
+        if (error) {
+          toast.error(error)
+          return
+        }
+        
         onComplete(formData)
       }
       return
@@ -135,6 +146,22 @@ export function AuthForm({ onComplete, onBack }: AuthFormProps) {
       const isValid = await trigger(['name', 'phone', 'nickname'])
       if (isValid) setStep(3)
     } else if (step === 3) {
+      setLoading(true)
+      const { error } = await signUp({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        nickname: formData.nickname,
+        phone: formData.phone,
+      })
+      setLoading(false)
+      
+      if (error) {
+        toast.error(error)
+        return
+      }
+      
+      toast.success('Conta criada com sucesso!')
       onComplete(formData)
     }
   }
