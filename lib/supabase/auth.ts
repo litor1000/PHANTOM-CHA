@@ -90,10 +90,35 @@ export async function signOut() {
   return { error }
 }
 
+export async function signInWithGoogle() {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    })
+
+    if (error) {
+      return { error: error.message }
+    }
+
+    return { data, error: null }
+  } catch (error) {
+    console.error('Erro no login com Google:', error)
+    return { error: 'Erro ao fazer login com Google' }
+  }
+}
+
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) return null
 
     const { data: profile } = await supabase
@@ -124,7 +149,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 export async function updateUserProfile(userId: string, updates: Partial<CurrentUser>) {
   try {
     const updateData: any = {}
-    
+
     if (updates.name) updateData.name = updates.name
     if (updates.nickname) updateData.nickname = updates.nickname
     if (updates.phone !== undefined) updateData.phone = updates.phone
