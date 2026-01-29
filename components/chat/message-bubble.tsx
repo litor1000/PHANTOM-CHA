@@ -13,8 +13,14 @@ interface MessageBubbleProps {
   viewerNickname?: string
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString('pt-BR', {
+function formatTime(date: Date | string): string {
+  // Convert string to Date if needed (happens when loading from localStorage)
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return ''
+
+  return dateObj.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
   })
@@ -94,7 +100,7 @@ export function MessageBubble({
   useEffect(() => {
     if (isHolding && !isRevealed) {
       const startTime = Date.now()
-      
+
       holdIntervalRef.current = setInterval(() => {
         const elapsed = Date.now() - startTime
         const progress = Math.min((elapsed / HOLD_DURATION) * 100, 100)
@@ -104,10 +110,10 @@ export function MessageBubble({
       holdTimeoutRef.current = setTimeout(() => {
         setIsRevealed(true)
         setHoldProgress(100)
-        setCountdown(message.expiresIn ?? null)
+        setCountdown(message.expiresIn ?? 5)
         setIsHolding(false)
         onReveal?.(message.id)
-        
+
         if (holdIntervalRef.current) {
           clearInterval(holdIntervalRef.current)
         }
@@ -205,7 +211,7 @@ export function MessageBubble({
               if (restricted) {
                 return (
                   <div className="text-sm text-muted-foreground">
-                    Imagem visivel apenas para @{message.allowedNicknames.join(', @')}
+                    Imagem visivel apenas para @{message.allowedNicknames?.join(', @') || ''}
                   </div>
                 )
               }
@@ -254,11 +260,11 @@ export function MessageBubble({
 
           {/* Countdown Badge */}
           {countdown !== null && countdown > 0 && (
-            <div 
+            <div
               className={cn(
                 "absolute -top-3 -right-3 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium shadow-lg",
-                countdown <= 2 
-                  ? "bg-destructive text-destructive-foreground" 
+                countdown <= 2
+                  ? "bg-destructive text-destructive-foreground"
                   : "bg-primary text-primary-foreground"
               )}
             >

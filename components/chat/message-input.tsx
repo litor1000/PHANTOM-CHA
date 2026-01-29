@@ -16,8 +16,8 @@ interface MessageInputProps {
 export function MessageInput({ onSend, onSendPhoto }: MessageInputProps) {
   const [message, setMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  // Fixed expiry time of 10 seconds for security
-  const EXPIRES_IN = 10
+  // Fixed expiry time of 5 seconds for security
+  const EXPIRES_IN = 5
   
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -86,7 +86,7 @@ export function MessageInput({ onSend, onSendPhoto }: MessageInputProps) {
         >
           <Clock className="h-5 w-5" />
           <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
-            10s
+            5s
           </span>
         </Button>
       </div>

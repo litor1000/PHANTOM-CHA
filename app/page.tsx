@@ -17,15 +17,15 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [contacts, setContacts] = useState<User[]>([])
 
-  const selectedUser = mockUsers.find((u) => u.id === selectedUserId) || 
-                       conversations.find(c => c.user.id === selectedUserId)?.user
+  const selectedUser = mockUsers.find((u) => u.id === selectedUserId) ||
+    conversations.find(c => c.user.id === selectedUserId)?.user
 
   // Check for existing user session
   useEffect(() => {
     const loadUser = async () => {
       // Try to get user from Supabase first
       const supabaseUser = await getCurrentUser()
-      
+
       if (supabaseUser) {
         setUser(supabaseUser)
       } else {
@@ -39,13 +39,13 @@ export default function Home() {
           }
         }
       }
-      
+
       // Load conversations
       const savedConvs = localStorage.getItem('phantom-conversations')
       if (savedConvs) {
         try {
           setConversations(JSON.parse(savedConvs))
-        } catch {}
+        } catch { }
       } else {
         setConversations(mockConversations)
       }
@@ -55,8 +55,35 @@ export default function Home() {
       if (savedContacts) {
         try {
           setContacts(JSON.parse(savedContacts))
-        } catch {}
+        } catch { }
       }
+
+      // Onboarding: create tutorial bot conversation on first access
+      const onboarded = localStorage.getItem('phantom-onboarded')
+      if (!onboarded) {
+        const { TUTORIAL_BOT, TUTORIAL_BOT_ID, TUTORIAL_MESSAGES, createTutorialConversation } = await import('@/lib/bot-data')
+
+        // Create initial tutorial message (just the greeting)
+        const initialMessages = [
+          { ...TUTORIAL_MESSAGES.greeting, timestamp: new Date() }
+        ]
+
+        try {
+          localStorage.setItem(`phantom-messages-${TUTORIAL_BOT_ID}`, JSON.stringify(initialMessages))
+        } catch { }
+
+        const botConversation = createTutorialConversation()
+        botConversation.unreadCount = 1
+        botConversation.lastMessage = TUTORIAL_MESSAGES.greeting
+
+        const newConvs = [botConversation]
+        setConversations(newConvs)
+        localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
+        setContacts([TUTORIAL_BOT])
+        localStorage.setItem('phantom-contacts', JSON.stringify([TUTORIAL_BOT]))
+        localStorage.setItem('phantom-onboarded', '1')
+      }
+
 
       // Load and apply theme
       const savedTheme = localStorage.getItem('phantom-theme') || 'teal'
@@ -72,45 +99,65 @@ export default function Home() {
 
       setIsLoading(false)
 
+      // Listen for tutorial completion to update conversations list
+      const handleTutorialComplete = () => {
+        // Remove bot from conversations
+        setConversations((prev) => {
+          const filtered = prev.filter((c) => c.id !== `conv-bot-tutorial`)
+          localStorage.setItem('phantom-conversations', JSON.stringify(filtered))
+          return filtered
+        })
+
+        // Remove bot from contacts
+        setContacts((prev) => {
+          const filtered = prev.filter((contact) => contact.id !== 'bot-tutorial')
+          localStorage.setItem('phantom-contacts', JSON.stringify(filtered))
+          return filtered
+        })
+      }
+
+      window.addEventListener('tutorial-completed', handleTutorialComplete)
+
       return () => {
         window.removeEventListener('storage', handleStorage)
+        window.removeEventListener('tutorial-completed', handleTutorialComplete)
       }
     }
-    
+
     loadUser()
   }, [])
 
   const handleOnboardingComplete = async (userData: UserFormData) => {
     const currentUserData = await getCurrentUser()
-    
+
     if (currentUserData) {
       // Upload photos to Supabase if provided
       let profilePhotoUrl = userData.profilePhoto
       let coverPhotoUrl = userData.coverPhoto
-      
+
       if (userData.profilePhoto && userData.profilePhoto.startsWith('data:')) {
         const uploadedUrl = await uploadProfilePhoto(currentUserData.id, userData.profilePhoto)
         if (uploadedUrl) profilePhotoUrl = uploadedUrl
       }
-      
+
       if (userData.coverPhoto && userData.coverPhoto.startsWith('data:')) {
         const uploadedUrl = await uploadCoverPhoto(currentUserData.id, userData.coverPhoto)
         if (uploadedUrl) coverPhotoUrl = uploadedUrl
       }
-      
+
       // Update user profile with photos
       await updateUserProfile(currentUserData.id, {
         ...currentUserData,
-        profilePhoto: profilePhotoUrl,
-        coverPhoto: coverPhotoUrl,
+        profilePhoto: profilePhotoUrl ?? null,
+        coverPhoto: coverPhotoUrl ?? undefined,
       })
-      
+
       const newUser: CurrentUser = {
         ...currentUserData,
-        profilePhoto: profilePhotoUrl,
-        coverPhoto: coverPhotoUrl,
+        profilePhoto: profilePhotoUrl ?? null,
+        coverPhoto: coverPhotoUrl ?? undefined,
       }
-      
+
       setUser(newUser)
       localStorage.setItem('phantom-user', JSON.stringify(newUser))
     } else {
@@ -122,19 +169,19 @@ export default function Home() {
         email: userData.email,
         phone: userData.phone || '',
         avatar: userData.profilePhoto || '',
-        profilePhoto: userData.profilePhoto,
-        coverPhoto: userData.coverPhoto || undefined,
+        profilePhoto: userData.profilePhoto ?? null,
+        coverPhoto: userData.coverPhoto ?? undefined,
         isOnline: true,
       }
       setUser(newUser)
       localStorage.setItem('phantom-user', JSON.stringify(newUser))
     }
-    
+
     // Also save to global phantom-users list for uniqueness check
     const storedUsersStr = localStorage.getItem('phantom-users')
     let storedUsers = []
     if (storedUsersStr) {
-       try { storedUsers = JSON.parse(storedUsersStr) } catch {}
+      try { storedUsers = JSON.parse(storedUsersStr) } catch { }
     }
     const newUserForList = {
       id: 'current-user',
@@ -143,15 +190,15 @@ export default function Home() {
       email: userData.email,
     }
     if (!storedUsers.some((u: any) => u.nickname === newUserForList.nickname)) {
-       storedUsers.push(newUserForList)
-       localStorage.setItem('phantom-users', JSON.stringify(storedUsers))
+      storedUsers.push(newUserForList)
+      localStorage.setItem('phantom-users', JSON.stringify(storedUsers))
     }
   }
 
   const handleUpdateUser = async (updatedUser: CurrentUser) => {
     setUser(updatedUser)
     localStorage.setItem('phantom-user', JSON.stringify(updatedUser))
-    
+
     // Update in Supabase
     if (updatedUser.id) {
       await updateUserProfile(updatedUser.id, updatedUser)
@@ -167,24 +214,24 @@ export default function Home() {
   const handleAddContact = (nickname: string) => {
     const cleanNick = nickname.replace('@', '').toLowerCase()
     if (contacts.some(c => c.nickname.toLowerCase() === cleanNick)) return true
-    
+
     let found = mockUsers.find(u => u.nickname.toLowerCase() === cleanNick)
-    
+
     if (!found) {
-        const storedUsersStr = localStorage.getItem('phantom-users')
-        if (storedUsersStr) {
-            try {
-                const storedUsers = JSON.parse(storedUsersStr)
-                found = storedUsers.find((u: any) => u.nickname.toLowerCase() === cleanNick)
-            } catch {}
-        }
+      const storedUsersStr = localStorage.getItem('phantom-users')
+      if (storedUsersStr) {
+        try {
+          const storedUsers = JSON.parse(storedUsersStr)
+          found = storedUsers.find((u: any) => u.nickname.toLowerCase() === cleanNick)
+        } catch { }
+      }
     }
 
     if (found) {
-        const newContacts = [...contacts, found]
-        setContacts(newContacts)
-        localStorage.setItem('phantom-contacts', JSON.stringify(newContacts))
-        return true
+      const newContacts = [...contacts, found]
+      setContacts(newContacts)
+      localStorage.setItem('phantom-contacts', JSON.stringify(newContacts))
+      return true
     }
     return false
   }
@@ -192,32 +239,32 @@ export default function Home() {
   const handleCreateGroup = (name: string, members: string[]) => {
     const groupId = `group-${Date.now()}`
     const newGroup: Conversation = {
+      id: groupId,
+      user: {
         id: groupId,
-        user: {
-            id: groupId,
-            name: name,
-            nickname: 'group',
-            email: '',
-            phone: '',
-            avatar: '',
-            isOnline: true
-        },
-        unreadCount: 0,
-        isGroup: true,
-        members: ['current-user'], // Creator is member
-        pendingMembers: members, // Others are pending
-        lastMessage: {
-            id: `msg-${Date.now()}`,
-            content: 'Grupo criado',
-            senderId: 'system',
-            receiverId: groupId,
-            timestamp: new Date(),
-            isRead: true,
-            isRevealed: true,
-            type: 'text'
-        }
+        name: name,
+        nickname: 'group',
+        email: '',
+        phone: '',
+        avatar: '',
+        isOnline: true
+      },
+      unreadCount: 0,
+      isGroup: true,
+      members: ['current-user'], // Creator is member
+      pendingMembers: members, // Others are pending
+      lastMessage: {
+        id: `msg-${Date.now()}`,
+        content: 'Grupo criado',
+        senderId: 'system',
+        receiverId: groupId,
+        timestamp: new Date(),
+        isRead: true,
+        isRevealed: true,
+        type: 'text'
+      }
     }
-    
+
     const newConvs = [newGroup, ...conversations]
     setConversations(newConvs)
     localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))

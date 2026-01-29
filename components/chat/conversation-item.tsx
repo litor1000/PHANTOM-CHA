@@ -19,19 +19,26 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
-function formatTime(date?: Date): string {
+function formatTime(date?: Date | string): string {
   if (!date) return ''
+
+  // Convert string to Date if needed (happens when loading from localStorage)
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return ''
+
   const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  const diff = now.getTime() - dateObj.getTime()
   const hours = Math.floor(diff / 3600000)
 
   if (hours < 24) {
-    return date.toLocaleTimeString('pt-BR', {
+    return dateObj.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
     })
   }
-  return date.toLocaleDateString('pt-BR', {
+  return dateObj.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
   })
@@ -76,7 +83,7 @@ export function ConversationItem({ conversation, onClick }: ConversationItemProp
             {formatTime(lastMessage?.timestamp)}
           </span>
         </div>
-        
+
         <div className="flex items-center justify-between gap-2 mt-0.5">
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
             {isFromMe && <span className="text-xs">Você:</span>}
@@ -89,7 +96,7 @@ export function ConversationItem({ conversation, onClick }: ConversationItemProp
               <span className="truncate">{lastMessage?.content || 'Sem mensagens'}</span>
             )}
           </div>
-          
+
           {hasUnread && (
             <span className="shrink-0 flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium">
               {unreadCount}

@@ -30,10 +30,17 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
-function formatLastSeen(date?: Date): string {
+function formatLastSeen(date?: Date | string): string {
   if (!date) return ''
+
+  // Convert string to Date if needed (happens when loading from localStorage)
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return ''
+
   const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  const diff = now.getTime() - dateObj.getTime()
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(minutes / 60)
 
@@ -122,26 +129,26 @@ export function ChatHeader({ user, onBack, onViewProfile }: ChatHeaderProps) {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="gap-2" disabled>
-             {sessionStatus === 'active' ? (
-               <CheckCircle className="w-4 h-4 text-emerald-500" />
-             ) : (
-               <XCircle className="w-4 h-4 text-destructive" />
-             )}
-             Status: {sessionStatus === 'active' ? 'Conectado' : 'Desconectado'}
+            {sessionStatus === 'active' ? (
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+            ) : (
+              <XCircle className="w-4 h-4 text-destructive" />
+            )}
+            Status: {sessionStatus === 'active' ? 'Conectado' : 'Desconectado'}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleLogout} className="gap-2 text-destructive focus:text-destructive">
             <LogOut className="w-4 h-4" />
             Sair
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={() => setIsMuted(!isMuted)}
             className="gap-2"
           >
             <BellOff className="w-4 h-4" />
             {isMuted ? 'Ativar notificacoes' : 'Silenciar'}
           </DropdownMenuItem>
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={() => setIsBlocked(!isBlocked)}
             className="gap-2 text-destructive focus:text-destructive"
           >

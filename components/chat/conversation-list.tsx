@@ -32,6 +32,8 @@ interface ConversationListProps {
   contacts?: UserType[]
   onAddContact?: (nickname: string) => void
   onCreateGroup?: (name: string, members: string[]) => void
+  onAcceptInvite?: (groupId: string) => void
+  onRejectInvite?: (groupId: string) => void
 }
 
 type TabType = 'chats' | 'contacts' | 'groups'
@@ -45,21 +47,24 @@ export function ConversationList({
   contacts = [],
   onAddContact,
   onCreateGroup,
+  onAcceptInvite,
+  onRejectInvite,
 }: ConversationListProps) {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<TabType>('chats')
   const [showSettings, setShowSettings] = useState(false)
   const [showAlbum, setShowAlbum] = useState(false)
   const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
   const [newContactNickname, setNewContactNickname] = useState('')
-  
+
   // Group creation state
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false)
   const [groupName, setGroupName] = useState('')
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
 
   // Invites state (mock)
-  const [groupInvites, setGroupInvites] = useState<{id: string, groupName: string, inviter: string}[]>([])
+  const [groupInvites, setGroupInvites] = useState<{ id: string, groupName: string, inviter: string }[]>([])
   const [photoRequests, setPhotoRequests] = useState<PhotoRequest[]>([
     {
       id: 'req-1',
@@ -72,8 +77,8 @@ export function ConversationList({
 
   const filteredConversations = conversations.filter((conv) => {
     const matchesSearch = conv.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.user.nickname.toLowerCase().includes(searchQuery.toLowerCase())
-    
+      conv.user.nickname.toLowerCase().includes(searchQuery.toLowerCase())
+
     if (activeTab === 'chats') return !conv.isGroup && matchesSearch
     if (activeTab === 'groups') {
       if (!conv.isGroup) return false
@@ -86,15 +91,15 @@ export function ConversationList({
   })
 
   // Separate invites from joined groups
-  const groupInvitesList = activeTab === 'groups' 
+  const groupInvitesList = activeTab === 'groups'
     ? filteredConversations.filter(c => c.pendingMembers?.includes(currentUser.id))
     : []
-  
+
   const joinedGroupsList = activeTab === 'groups'
     ? filteredConversations.filter(c => !c.pendingMembers?.includes(currentUser.id))
     : []
 
-  const filteredContacts = contacts.filter(contact => 
+  const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     contact.nickname.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -102,7 +107,8 @@ export function ConversationList({
   const handleAddContactSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (newContactNickname.trim() && onAddContact) {
-      const success = onAddContact(newContactNickname.trim())
+      const result = onAddContact(newContactNickname.trim())
+      const success = typeof result === 'boolean' ? result : true
       if (success) {
         setNewContactNickname('')
         toast({
@@ -130,8 +136,8 @@ export function ConversationList({
   }
 
   const toggleMemberSelection = (userId: string) => {
-    setSelectedMembers(prev => 
-      prev.includes(userId) 
+    setSelectedMembers(prev =>
+      prev.includes(userId)
         ? prev.filter(id => id !== userId)
         : [...prev, userId]
     )
@@ -268,7 +274,7 @@ export function ConversationList({
                 </Button>
               </form>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto">
               {filteredContacts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-8">
@@ -281,13 +287,10 @@ export function ConversationList({
                   {filteredContacts.map((contact) => (
                     <div key={contact.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors">
                       <div className="relative w-10 h-10 rounded-full bg-card overflow-hidden border border-border">
-                        {contact.profilePhoto ? (
-                          <Image
-                            src={contact.profilePhoto}
-                            alt={contact.name}
-                            fill
-                            className="object-cover"
-                          />
+                        {contact.avatar ? (
+                          <div className="w-full h-full flex items-center justify-center text-2xl">
+                            {contact.avatar}
+                          </div>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <User className="w-5 h-5 text-muted-foreground" />
@@ -329,31 +332,31 @@ export function ConversationList({
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Nome do Grupo</Label>
-                      <Input 
-                        value={groupName} 
+                      <Input
+                        value={groupName}
                         onChange={e => setGroupName(e.target.value)}
-                        placeholder="Ex: Amigos da Faculdade" 
+                        placeholder="Ex: Amigos da Faculdade"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Selecionar Membros ({selectedMembers.length})</Label>
                       <div className="max-h-48 overflow-y-auto border rounded-md p-1">
                         {contacts.length === 0 ? (
-                           <p className="p-2 text-sm text-muted-foreground">Adicione contatos primeiro.</p>
+                          <p className="p-2 text-sm text-muted-foreground">Adicione contatos primeiro.</p>
                         ) : (
-                           contacts.map(contact => (
-                             <div 
-                               key={contact.id} 
-                               className="flex items-center gap-2 p-2 hover:bg-secondary rounded cursor-pointer"
-                               onClick={() => toggleMemberSelection(contact.id)}
-                             >
-                               <Checkbox 
-                                  checked={selectedMembers.includes(contact.id)}
-                                  onCheckedChange={() => toggleMemberSelection(contact.id)}
-                               />
-                               <span className="text-sm">{contact.name}</span>
-                             </div>
-                           ))
+                          contacts.map(contact => (
+                            <div
+                              key={contact.id}
+                              className="flex items-center gap-2 p-2 hover:bg-secondary rounded cursor-pointer"
+                              onClick={() => toggleMemberSelection(contact.id)}
+                            >
+                              <Checkbox
+                                checked={selectedMembers.includes(contact.id)}
+                                onCheckedChange={() => toggleMemberSelection(contact.id)}
+                              />
+                              <span className="text-sm">{contact.name}</span>
+                            </div>
+                          ))
                         )}
                       </div>
                     </div>
@@ -367,35 +370,35 @@ export function ConversationList({
 
             {/* Invites Section */}
             {groupInvitesList.length > 0 && (
-                <div className="p-3 bg-secondary/30 border-b border-border">
-                  <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">CONVITES PENDENTES</h3>
-                  {groupInvitesList.map(group => (
-                      <div key={group.id} className="flex items-center justify-between p-2 bg-card rounded-md border border-border mb-2">
-                          <div className="text-sm">
-                              <span className="font-bold">{group.user.name}</span>
-                              <p className="text-xs text-muted-foreground">Você foi convidado para participar</p>
-                          </div>
-                          <div className="flex gap-1">
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                                onClick={() => onAcceptInvite?.(group.id)}
-                              >
-                                  <Check className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                onClick={() => onRejectInvite?.(group.id)}
-                              >
-                                  <XIcon className="h-4 w-4" />
-                              </Button>
-                          </div>
-                      </div>
-                  ))}
-                </div>
+              <div className="p-3 bg-secondary/30 border-b border-border">
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">CONVITES PENDENTES</h3>
+                {groupInvitesList.map(group => (
+                  <div key={group.id} className="flex items-center justify-between p-2 bg-card rounded-md border border-border mb-2">
+                    <div className="text-sm">
+                      <span className="font-bold">{group.user.name}</span>
+                      <p className="text-xs text-muted-foreground">Você foi convidado para participar</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                        onClick={() => onAcceptInvite?.(group.id)}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        onClick={() => onRejectInvite?.(group.id)}
+                      >
+                        <XIcon className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="flex-1 overflow-y-auto">
