@@ -5,7 +5,7 @@ import { ArrowLeft, MoreVertical, BellOff, Ban, User, LogOut, CheckCircle, XCirc
 import type { User as UserType } from '@/lib/types'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase/client'
+import { getSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -56,6 +56,11 @@ export function ChatHeader({ user, onBack, onViewProfile }: ChatHeaderProps) {
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'active' | 'inactive'>('loading')
 
   useEffect(() => {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      setSessionStatus('inactive')
+      return
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSessionStatus(session ? 'active' : 'inactive')
     })
@@ -68,6 +73,11 @@ export function ChatHeader({ user, onBack, onViewProfile }: ChatHeaderProps) {
   }, [])
 
   const handleLogout = async () => {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      toast.error('Configuração do Supabase inválida. Verifique NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no Vercel.')
+      return
+    }
     await supabase.auth.signOut()
     toast.success('Logout realizado')
     window.location.reload()

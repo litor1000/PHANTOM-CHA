@@ -144,7 +144,13 @@ export function AuthForm({ onComplete, onBack }: AuthFormProps) {
       if (isValid) {
         // Check if email already exists before allowing signup
         setLoading(true)
-        const { supabase } = await import('@/lib/supabase/client')
+        const { getSupabaseClient } = await import('@/lib/supabase/client')
+        const supabase = getSupabaseClient()
+        if (!supabase) {
+          setLoading(false)
+          toast.error('Configuração do Supabase inválida. Verifique NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no Vercel.')
+          return
+        }
         const { data: existingUser } = await supabase
           .from('users')
           .select('id')

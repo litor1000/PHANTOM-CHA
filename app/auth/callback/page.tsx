@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
+import { getSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 export default function AuthCallback() {
@@ -11,11 +11,21 @@ export default function AuthCallback() {
     useEffect(() => {
         const handleCallback = async () => {
             try {
+                const supabase = getSupabaseClient()
+                if (!supabase) {
+                    toast.error('Configuração do Supabase inválida. Verifique NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no Vercel.')
+                    router.push('/')
+                    return
+                }
                 const { data: { session }, error } = await supabase.auth.getSession()
 
                 if (error) {
                     console.error('Erro no callback:', error)
-                    toast.error('Erro ao fazer login com Google')
+                    if (typeof error.message === 'string' && /invalid api/i.test(error.message)) {
+                        toast.error('Configuração do Supabase inválida. Verifique NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no Vercel.')
+                    } else {
+                        toast.error('Erro ao fazer login com Google')
+                    }
                     router.push('/')
                     return
                 }

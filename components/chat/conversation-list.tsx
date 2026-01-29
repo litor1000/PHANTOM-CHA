@@ -65,15 +65,7 @@ export function ConversationList({
 
   // Invites state (mock)
   const [groupInvites, setGroupInvites] = useState<{ id: string, groupName: string, inviter: string }[]>([])
-  const [photoRequests, setPhotoRequests] = useState<PhotoRequest[]>([
-    {
-      id: 'req-1',
-      photoId: 'photo-1',
-      userId: 'user-1',
-      userName: 'Ana Silva',
-      timestamp: new Date(),
-    },
-  ])
+  const [photoRequests, setPhotoRequests] = useState<PhotoRequest[]>([])
 
   const filteredConversations = conversations.filter((conv) => {
     const matchesSearch = conv.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

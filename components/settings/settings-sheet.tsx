@@ -9,13 +9,11 @@ import {
   Camera,
   ImageIcon,
   LogOut,
-  Palette,
   Wifi,
   WifiOff,
   Wallet,
   Images,
   ChevronRight,
-  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -42,33 +40,8 @@ export function SettingsSheet({
   onOpenAlbum,
 }: SettingsSheetProps) {
   const [isOnline, setIsOnline] = useState(user.isOnline ?? true)
-  const [themeColor, setThemeColor] = useState<string>('teal')
   const profileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
-
-  const colors = [
-    { id: 'teal', color: 'bg-teal-500', label: 'Teal' },
-    { id: 'blue', color: 'bg-blue-500', label: 'Azul' },
-    { id: 'pink', color: 'bg-pink-500', label: 'Rosa' },
-    { id: 'orange', color: 'bg-orange-500', label: 'Laranja' },
-    { id: 'green', color: 'bg-green-500', label: 'Verde' },
-  ]
-
-  // Load theme from local storage
-  React.useEffect(() => {
-    const savedTheme = localStorage.getItem('phantom-theme')
-    if (savedTheme) {
-      setThemeColor(savedTheme)
-    }
-  }, [])
-
-  // Apply theme color
-  React.useEffect(() => {
-    console.log('Settings: Aplicando tema', themeColor)
-    document.documentElement.setAttribute('data-theme', themeColor)
-    localStorage.setItem('phantom-theme', themeColor)
-    console.log('Settings: data-theme definido como', document.documentElement.getAttribute('data-theme'))
-  }, [themeColor])
 
 
   const handlePhotoChange = (
@@ -96,7 +69,6 @@ export function SettingsSheet({
   }
 
   const handleSaveTheme = () => {
-    toast.success("Tema aplicado com sucesso!")
     onClose()
   }
 
@@ -236,37 +208,7 @@ export function SettingsSheet({
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>
 
-          {/* Cor do Tema */}
-          <div className="px-4 py-3 border-b border-border/50">
-            <div className="flex items-center gap-3 mb-3">
-              <Palette className="w-5 h-5 text-primary" />
-              <p className="text-sm font-medium text-foreground">Cor do Tema</p>
-            </div>
-            <div className="flex gap-2">
-              {colors.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setThemeColor(c.id)}
-                  className={cn(
-                    'w-8 h-8 rounded-full transition-all flex items-center justify-center',
-                    c.color,
-                    themeColor === c.id && 'ring-2 ring-offset-2 ring-offset-background ring-foreground'
-                  )}
-                  aria-label={c.label}
-                >
-                  {themeColor === c.id && <Check className="w-4 h-4 text-white drop-shadow-md" />}
-                </button>
-              ))}
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="mt-4 w-full"
-              onClick={handleSaveTheme}
-            >
-              Aplicar Tema
-            </Button>
-          </div>
+          {/* Cor do Tema removida */}
         </div>
 
         {/* Logout */}

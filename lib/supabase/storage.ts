@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { getSupabaseClient } from './client'
 
 export async function uploadChatImage(
   userId: string,
@@ -6,6 +6,10 @@ export async function uploadChatImage(
   messageId: string
 ): Promise<{ url: string; path: string } | null> {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return null
+    }
     const base64Data = imageData.split(',')[1]
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
@@ -48,6 +52,10 @@ export async function uploadProfilePhoto(
   imageData: string
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return null
+    }
     const base64Data = imageData.split(',')[1]
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
@@ -87,6 +95,10 @@ export async function uploadCoverPhoto(
   imageData: string
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return null
+    }
     const base64Data = imageData.split(',')[1]
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
@@ -123,6 +135,10 @@ export async function uploadCoverPhoto(
 
 export async function deleteChatImage(path: string): Promise<boolean> {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return false
+    }
     const { error } = await supabase.storage
       .from('chat-images')
       .remove([path])

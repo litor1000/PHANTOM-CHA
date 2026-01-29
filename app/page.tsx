@@ -84,19 +84,6 @@ export default function Home() {
         localStorage.setItem('phantom-onboarded', '1')
       }
 
-
-      // Load and apply theme
-      const savedTheme = localStorage.getItem('phantom-theme') || 'teal'
-      document.documentElement.setAttribute('data-theme', savedTheme)
-
-      // Listen for theme changes
-      const handleStorage = (e: StorageEvent) => {
-        if (e.key === 'phantom-theme' && e.newValue) {
-          document.documentElement.setAttribute('data-theme', e.newValue)
-        }
-      }
-      window.addEventListener('storage', handleStorage)
-
       setIsLoading(false)
 
       // Listen for tutorial completion to update conversations list
@@ -119,7 +106,6 @@ export default function Home() {
       window.addEventListener('tutorial-completed', handleTutorialComplete)
 
       return () => {
-        window.removeEventListener('storage', handleStorage)
         window.removeEventListener('tutorial-completed', handleTutorialComplete)
       }
     }
