@@ -64,6 +64,9 @@ export async function getUserAlbum(userId: string): Promise<{ data: AlbumPhoto[]
         const supabase = getSupabaseClient()
         if (!supabase) return { data: null, error: 'Supabase não configurado' }
 
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        const currentUserId = currentUser?.id
+
         const { data, error } = await supabase
             .from('user_albums')
             .select('*')
@@ -72,11 +75,18 @@ export async function getUserAlbum(userId: string): Promise<{ data: AlbumPhoto[]
 
         if (error) throw error
 
-        const photos: AlbumPhoto[] = data.map((item: any) => ({
-            id: item.id,
-            url: item.url,
-            isBlurred: true
-        }))
+        const photos: AlbumPhoto[] = data.map((item: any) => {
+            // Check permissions
+            const allowedViewers = item.allowed_viewers || []
+            const isOwner = currentUserId === item.user_id
+            const hasAccess = isOwner || (currentUserId && allowedViewers.includes(currentUserId))
+
+            return {
+                id: item.id,
+                url: item.url,
+                isBlurred: !hasAccess // Blur if no access
+            }
+        })
 
         return { data: photos, error: null }
     } catch (error: any) {
@@ -108,6 +118,44 @@ export async function deleteAlbumPhoto(photoId: string): Promise<{ error: string
 
     } catch (error: any) {
         console.error('Erro ao deletar foto:', error)
+        return { error: error.message }
+    }
+}
+
+/**
+ * Grant access to a photo for a user
+ */
+export async function grantPhotoAccess(photoId: string, userIdToGrant: string): Promise<{ error: string | null }> {
+    try {
+        const supabase = getSupabaseClient()
+        if (!supabase) return { error: 'Supabase não configurado' }
+
+        // Fetch current allowed_viewers
+        const { data: photo, error: fetchError } = await supabase
+            .from('user_albums')
+            .select('allowed_viewers')
+            .eq('id', photoId)
+            .single()
+
+        if (fetchError) throw fetchError
+
+        const currentViewers = photo.allowed_viewers || []
+        if (currentViewers.includes(userIdToGrant)) {
+            return { error: null } // Already granted
+        }
+
+        const updatedViewers = [...currentViewers, userIdToGrant]
+
+        const { error: updateError } = await supabase
+            .from('user_albums')
+            .update({ allowed_viewers: updatedViewers })
+            .eq('id', photoId)
+
+        if (updateError) throw updateError
+
+        return { error: null }
+    } catch (error: any) {
+        console.error('Erro ao conceder acesso:', error)
         return { error: error.message }
     }
 }

@@ -8,10 +8,11 @@ export async function sendMessage(message: {
     content: string
     senderId: string
     receiverId: string
-    type?: 'text' | 'image'
+    type?: 'text' | 'image' | 'request'
     imageUrl?: string
     allowedNicknames?: string[]
     expiresIn?: number
+    metadata?: any
 }): Promise<{ data: Message | null; error: string | null }> {
     try {
         const supabase = getSupabaseClient()
@@ -29,6 +30,7 @@ export async function sendMessage(message: {
             is_revealed: false, // Sempre começa oculta
             is_read: false,
             expires_in: message.expiresIn || 10, // Padrão: 10 segundos
+            metadata: message.metadata // Novo campo
         }
 
         const { data, error } = await supabase
@@ -55,6 +57,7 @@ export async function sendMessage(message: {
             imageUrl: data.image_url,
             allowedNicknames: data.allowed_nicknames,
             expiresIn: data.expires_in,
+            metadata: data.metadata,
         }
 
         return { data: formattedMessage, error: null }
@@ -104,6 +107,7 @@ export async function loadMessages(
             allowedNicknames: msg.allowed_nicknames,
             expiresIn: msg.expires_in,
             expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+            metadata: msg.metadata,
         }))
 
         return { data: messages, error: null }

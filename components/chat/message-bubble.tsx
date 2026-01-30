@@ -8,9 +8,10 @@ import { cn } from '@/lib/utils'
 interface MessageBubbleProps {
   message: Message
   isOwn: boolean
-  onReveal?: (messageId: string) => void
   onExpire?: (messageId: string) => void
   viewerNickname?: string
+  onAcceptRequest?: (messageId: string, metadata: any) => Promise<void>
+  onRejectRequest?: (messageId: string, metadata: any) => Promise<void>
 }
 
 function formatTime(date: Date | string): string {
@@ -29,24 +30,35 @@ function formatTime(date: Date | string): string {
 export function MessageBubble({
   message,
   isOwn,
-  onReveal,
   onExpire,
   viewerNickname,
+  onAcceptRequest,
+  onRejectRequest,
 }: MessageBubbleProps) {
   const [isRevealed, setIsRevealed] = useState(message.isRevealed)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isExpiring, setIsExpiring] = useState(false)
+  const [requestStatus, setRequestStatus] = useState<'pending' | 'accepted' | 'rejected'>(
+    message.metadata?.status || 'pending'
+  )
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Update request status if prop changes (e.g. from polling)
+  useEffect(() => {
+    if (message.metadata?.status && message.metadata.status !== requestStatus) {
+      setRequestStatus(message.metadata.status)
+    }
+  }, [message.metadata?.status])
+
   const handleReveal = useCallback(() => {
-    if (isRevealed || isOwn) return
+    if (isRevealed || isOwn || message.type === 'request') return
 
     setIsRevealed(true)
     const expiresInSeconds = message.expiresIn ?? 10
     console.log('⏱️ Mensagem revelada! Timer iniciado:', expiresInSeconds, 'segundos')
     setCountdown(expiresInSeconds)
-    onReveal?.(message.id)
-  }, [isRevealed, isOwn, message.expiresIn, message.id, onReveal])
+    // onReveal?.(message.id) // Removed as per new interface
+  }, [isRevealed, isOwn, message.expiresIn, message.id, message.type])
 
   useEffect(() => {
     if (countdown !== null && countdown > 0) {
@@ -76,10 +88,24 @@ export function MessageBubble({
     }
   }, [countdown, message.id, onExpire])
 
-  const showBlur = !isOwn && !isRevealed
+  const showBlur = !isOwn && !isRevealed && message.type !== 'request'
 
   // Only show timer if strictly positive
   const showTimer = countdown !== null && countdown > 0
+
+  const handleAccept = async () => {
+    setRequestStatus('accepted')
+    if (onAcceptRequest) {
+      await onAcceptRequest(message.id, message.metadata)
+    }
+  }
+
+  const handleReject = async () => {
+    setRequestStatus('rejected')
+    if (onRejectRequest) {
+      await onRejectRequest(message.id, message.metadata)
+    }
+  }
 
   return (
     <div
@@ -95,21 +121,68 @@ export function MessageBubble({
           isOwn
             ? 'bg-message-sent text-foreground rounded-br-md'
             : 'bg-message-received text-foreground rounded-bl-md',
-          !isOwn && !isRevealed && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
+          !isOwn && !isRevealed && message.type !== 'request' && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
           countdown !== null && countdown <= 3 && 'animate-pulse'
         )}
         onClick={handleReveal}
         role={!isOwn && !isRevealed ? 'button' : undefined}
         tabIndex={!isOwn && !isRevealed ? 0 : undefined}
         aria-label={
-          !isOwn && !isRevealed
+          !isOwn && !isRevealed && message.type !== 'request'
             ? 'Clique para revelar a mensagem'
             : undefined
         }
       >
         {/* Message Content */}
         <div className="relative min-h-[24px]">
-          {message.type === 'image' && message.imageUrl ? (
+          {message.type === 'request' ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">{message.content}</p>
+
+              {/* Action Buttons - Only for receiver */}
+              {!isOwn && (
+                <div className="mt-1">
+                  {requestStatus === 'pending' ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleReject(); }}
+                        className="flex-1 bg-red-500/20 text-red-500 hover:bg-red-500/30 text-xs py-1.5 rounded-md font-medium transition-colors"
+                      >
+                        Recusar
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleAccept(); }}
+                        className="flex-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 text-xs py-1.5 rounded-md font-medium transition-colors"
+                      >
+                        Aceitar
+                      </button>
+                    </div>
+                  ) : requestStatus === 'accepted' ? (
+                    <div className="w-full bg-green-500/10 text-green-500 text-xs py-1.5 rounded-md font-medium text-center border border-green-500/20">
+                      Permissão Concedida
+                    </div>
+                  ) : (
+                    <div className="w-full bg-red-500/10 text-red-500 text-xs py-1.5 rounded-md font-medium text-center border border-red-500/20">
+                      Permissão Negada
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Status for sender */}
+              {isOwn && (
+                <div className="mt-1">
+                  {requestStatus === 'pending' ? (
+                    <span className="text-xs text-muted-foreground opacity-70 italic">Aguardando resposta...</span>
+                  ) : requestStatus === 'accepted' ? (
+                    <span className="text-xs text-green-500 font-medium">Permissão Aceita</span>
+                  ) : (
+                    <span className="text-xs text-red-500 font-medium">Permissão Recusada</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : message.type === 'image' && message.imageUrl ? (
             (() => {
               const restricted =
                 !isOwn &&
@@ -155,13 +228,6 @@ export function MessageBubble({
               </div>
             </div>
           )}
-
-          {/* Countdown timer overlay (hidden as per user request) */}
-          {/* {showTimer && !isOwn && (
-             <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
-                <span className="text-[10px] font-bold text-primary">{countdown}</span>
-             </div>
-          )} */}
         </div>
 
         {/* Time and Status */}
@@ -184,5 +250,39 @@ export function MessageBubble({
         </div>
       </div>
     </div>
+  )
+}
+
+{/* Countdown timer overlay (hidden as per user request) */ }
+{/* {showTimer && !isOwn && (
+             <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
+                <span className="text-[10px] font-bold text-primary">{countdown}</span>
+             </div>
+          )} */}
+        </div >
+
+  {/* Time and Status */ }
+  < div
+className = {
+  cn(
+            'flex items-center justify-end gap-1 mt-1 transition-all duration-300',
+    showBlur && 'blur-sm opacity-50'
+          )}
+        >
+  <span className="text-[10px] text-muted-foreground">
+    {formatTime(message.timestamp)}
+  </span>
+{
+  isOwn && (
+    message.isRead ? (
+      <CheckCheck className="h-3.5 w-3.5 text-primary" />
+    ) : (
+      <Check className="h-3.5 w-3.5 text-muted-foreground" />
+    )
+  )
+}
+        </div >
+      </div >
+    </div >
   )
 }

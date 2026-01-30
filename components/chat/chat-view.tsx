@@ -184,7 +184,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     } catch { }
   }, [messages, storageKey, isTutorialBot])
 
-  const handleSend = async (content: string, expiresIn?: number) => {
+  const handleSend = async (content: string, expiresIn?: number, type: 'text' | 'image' | 'request' = 'text', metadata?: any) => {
     // Tutorial bot: keep local behavior
     if (isTutorialBot || !currentUserData?.id) {
       const newMessage: Message = {
@@ -211,8 +211,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       content,
       senderId: currentUserData.id,
       receiverId: user.id,
-      type: 'text',
+      type: type,
       expiresIn: expiresIn || 10,
+      metadata: metadata
     })
 
     if (data && !error) {
@@ -299,8 +300,59 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
   const handleRequestPhoto = (photoId: string) => {
     console.log('Solicitando acesso a foto:', photoId)
-    // Envia uma mensagem de solicitação
-    handleSend('🔒 Solicitei permissão para visualizar suas fotos do álbum.', 0)
+    // Envia uma mensagem de solicitação estruturada
+    handleSend('🔒 Solicitei permissão para visualizar suas fotos do álbum.', 0, 'request', {
+      photoId: photoId,
+      status: 'pending',
+      requestType: 'photo'
+    })
+  }
+
+  const handleAcceptRequest = async (messageId: string, metadata: any) => {
+    // 1. Grant access in DB
+    if (metadata?.photoId) {
+      const { grantPhotoAccess } = await import('@/lib/supabase/album')
+      await grantPhotoAccess(metadata.photoId, user.id)
+    }
+
+    // 2. Update status in message metadata. Use raw SQL or update function?
+    // Since 'messages' table allows update if receiver, we can update metadata.
+    // But RLS says "Users can update their received messages" (receiver_id = uid).
+    // Here, I am the *sender* of the original ACCEPTANCE? No.
+    // Wait. A sends Request to B.
+    // Message Sender: A. Receiver: B.
+    // B sees the message. B is the Receiver. B clicks "Accept".
+    // RLS: "Users can update their received messages".
+    // So B (Receiver) can update the message row. Perfect.
+
+    const { getSupabaseClient } = await import('@/lib/supabase/client')
+    const supabase = getSupabaseClient()
+    if (supabase) {
+      await supabase.from('messages').update({
+        metadata: { ...metadata, status: 'accepted' }
+      }).eq('id', messageId)
+
+      // Update local state
+      setMessages(prev => prev.map(m => m.id === messageId ? {
+        ...m,
+        metadata: { ...m.metadata, status: 'accepted' }
+      } : m))
+    }
+  }
+
+  const handleRejectRequest = async (messageId: string, metadata: any) => {
+    const { getSupabaseClient } = await import('@/lib/supabase/client')
+    const supabase = getSupabaseClient()
+    if (supabase) {
+      await supabase.from('messages').update({
+        metadata: { ...metadata, status: 'rejected' }
+      }).eq('id', messageId)
+
+      setMessages(prev => prev.map(m => m.id === messageId ? {
+        ...m,
+        metadata: { ...m.metadata, status: 'rejected' }
+      } : m))
+    }
   }
 
   return (
@@ -340,6 +392,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
               onReveal={handleReveal}
               onExpire={handleExpire}
               viewerNickname={currentUserData?.nickname || currentUser.nickname}
+              onAcceptRequest={handleAcceptRequest}
+              onRejectRequest={handleRejectRequest}
             />
           ))
         )}

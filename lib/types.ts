@@ -24,9 +24,14 @@ export interface Message {
   isRevealed: boolean
   expiresAt?: Date
   expiresIn?: number
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'request'
   imageUrl?: string
   allowedNicknames?: string[]
+  metadata?: {
+    photoId?: string
+    status?: 'pending' | 'accepted' | 'rejected'
+    requestType?: 'album' | 'photo'
+  }
 }
 
 export interface Conversation {
