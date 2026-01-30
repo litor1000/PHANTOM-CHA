@@ -34,6 +34,7 @@ interface ConversationListProps {
   onCreateGroup?: (name: string, members: string[]) => void
   onAcceptInvite?: (groupId: string) => void
   onRejectInvite?: (groupId: string) => void
+  onDeleteConversation?: (conversationId: string) => void
 }
 
 type TabType = 'chats' | 'contacts' | 'groups'
@@ -49,6 +50,7 @@ export function ConversationList({
   onCreateGroup,
   onAcceptInvite,
   onRejectInvite,
+  onDeleteConversation,
 }: ConversationListProps) {
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
@@ -278,6 +280,7 @@ export function ConversationList({
                     key={conversation.id}
                     conversation={conversation}
                     onClick={() => onSelectConversation(conversation.user.id)}
+                    onDelete={onDeleteConversation}
                   />
                 ))}
               </div>

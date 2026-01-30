@@ -9,6 +9,19 @@ interface ConversationItemProps {
   conversation: Conversation
   onClick: () => void
 }
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import { Trash2 } from "lucide-react"
+
+interface ConversationItemProps {
+  conversation: Conversation
+  onClick: () => void
+  onDelete?: (conversationId: string) => void
+}
 
 function getInitials(name: string): string {
   return name
@@ -44,66 +57,82 @@ function formatTime(date?: Date | string): string {
   })
 }
 
-export function ConversationItem({ conversation, onClick }: ConversationItemProps) {
+export function ConversationItem({ conversation, onClick, onDelete }: ConversationItemProps) {
   const { user, lastMessage, unreadCount } = conversation
   const hasUnread = unreadCount > 0
   const isFromMe = lastMessage?.senderId === 'current-user'
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
-    >
-      <div className="relative shrink-0">
-        <Avatar className="h-12 w-12">
-          <AvatarFallback className="bg-primary/20 text-primary font-medium">
-            {getInitials(user.name)}
-          </AvatarFallback>
-        </Avatar>
-        {user.isOnline && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-background" />
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={cn(
-              "font-semibold truncate",
-              hasUnread ? "text-foreground" : "text-foreground/80"
-            )}>
-              {user.name}
-            </span>
-            <span className="text-xs text-muted-foreground/70 truncate">
-              @{user.nickname}
-            </span>
-          </div>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {formatTime(lastMessage?.timestamp)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 mt-0.5">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
-            {isFromMe && <span className="text-xs">Você:</span>}
-            {lastMessage && !lastMessage.isRevealed && !isFromMe ? (
-              <span className="flex items-center gap-1 italic">
-                <Eye className="h-3.5 w-3.5" />
-                Mensagem secreta
-              </span>
-            ) : (
-              <span className="truncate">{lastMessage?.content || 'Sem mensagens'}</span>
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <button
+          type="button"
+          onClick={onClick}
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
+        >
+          <div className="relative shrink-0">
+            <Avatar className="h-12 w-12">
+              <AvatarFallback className="bg-primary/20 text-primary font-medium">
+                {getInitials(user.name)}
+              </AvatarFallback>
+            </Avatar>
+            {user.isOnline && (
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-background" />
             )}
           </div>
 
-          {hasUnread && (
-            <span className="shrink-0 flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium">
-              {unreadCount}
-            </span>
-          )}
-        </div>
-      </div>
-    </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={cn(
+                  "font-semibold truncate",
+                  hasUnread ? "text-foreground" : "text-foreground/80"
+                )}>
+                  {user.name}
+                </span>
+                <span className="text-xs text-muted-foreground/70 truncate">
+                  @{user.nickname}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {formatTime(lastMessage?.timestamp)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
+                {isFromMe && <span className="text-xs">Você:</span>}
+                {lastMessage && !lastMessage.isRevealed && !isFromMe ? (
+                  <span className="flex items-center gap-1 italic">
+                    <Eye className="h-3.5 w-3.5" />
+                    Mensagem secreta
+                  </span>
+                ) : (
+                  <span className="truncate">{lastMessage?.content || 'Sem mensagens'}</span>
+                )}
+              </div>
+
+              {hasUnread && (
+                <span className="shrink-0 flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          className="text-red-500 focus:text-red-500"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete?.(conversation.id)
+          }}
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Excluir conversa
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

@@ -156,12 +156,12 @@ export function MessageBubble({
             </div>
           )}
 
-          {/* Countdown timer overlay (optional) */}
-          {showTimer && !isOwn && (
-            <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
-              <span className="text-[10px] font-bold text-primary">{countdown}</span>
-            </div>
-          )}
+          {/* Countdown timer overlay (hidden as per user request) */}
+          {/* {showTimer && !isOwn && (
+             <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
+                <span className="text-[10px] font-bold text-primary">{countdown}</span>
+             </div>
+          )} */}
         </div>
 
         {/* Time and Status */}

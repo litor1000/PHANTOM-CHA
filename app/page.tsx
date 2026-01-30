@@ -164,6 +164,20 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [user?.id])
 
+  // Reload contacts from Supabase on init
+  useEffect(() => {
+    if (user?.id && user.id !== 'current-user') {
+      const loadContacts = async () => {
+        const { getContacts } = await import('@/lib/supabase/contacts')
+        const { data } = await getContacts(user.id)
+        if (data) {
+          setContacts(data)
+        }
+      }
+      loadContacts()
+    }
+  }, [user?.id])
+
   const handleOnboardingComplete = async (userData: UserFormData) => {
     const currentUserData = await getCurrentUser()
 
@@ -248,47 +262,7 @@ export default function Home() {
     setSelectedUserId(null)
   }
 
-  const handleAddContact = async (nickname: string) => {
-    const cleanNick = nickname.replace('@', '').toLowerCase()
-    if (contacts.some(c => c.nickname.toLowerCase() === cleanNick)) return true
 
-    // First, try to search in Supabase
-    const supabaseUser = await searchUserByNickname(cleanNick)
-
-    if (supabaseUser) {
-      const newContacts = [...contacts, supabaseUser]
-      setContacts(newContacts)
-      // Save contacts specific to current user
-      if (user?.id) {
-        localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(newContacts))
-      }
-      return true
-    }
-
-    // Fallback to mock users
-    let found = mockUsers.find(u => u.nickname.toLowerCase() === cleanNick)
-
-    if (!found) {
-      const storedUsersStr = localStorage.getItem('phantom-users')
-      if (storedUsersStr) {
-        try {
-          const storedUsers = JSON.parse(storedUsersStr)
-          found = storedUsers.find((u: any) => u.nickname.toLowerCase() === cleanNick)
-        } catch { }
-      }
-    }
-
-    if (found) {
-      const newContacts = [...contacts, found]
-      setContacts(newContacts)
-      // Save contacts specific to current user
-      if (user?.id) {
-        localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(newContacts))
-      }
-      return true
-    }
-    return false
-  }
 
   const handleCreateGroup = (name: string, members: string[]) => {
     const groupId = `group-${Date.now()}`
@@ -400,6 +374,44 @@ export default function Home() {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />
   }
 
+  // Delete conversation logic
+  const handleDeleteConversation = (conversationId: string) => {
+    setConversations(prev => {
+      const updated = prev.filter(c => c.id !== conversationId)
+      localStorage.setItem('phantom-conversations', JSON.stringify(updated))
+      return updated
+    })
+
+    // If deleted active conversation, deselect
+    if (selectedUserId) {
+      // If the conversation ID matches the selected user ID (often used as key) or 
+      // if we can find the user ID from the conversation ID
+      // Note: In our app, conversationId is often `conv-{userId}` or we find conversation by user ID.
+      // Let's check if the deleted conversation corresponds to the open chat.
+      const deletedConv = conversations.find(c => c.id === conversationId)
+      if (deletedConv && deletedConv.user.id === selectedUserId) {
+        setSelectedUserId(null)
+      }
+    }
+  }
+
+
+
+  // Update handleAddContact to use Supabase
+  const handleAddContact = async (nickname: string) => {
+    if (!user?.id || user.id === 'current-user') return false
+
+    const { addContact } = await import('@/lib/supabase/contacts')
+    const { data: newContact, error } = await addContact(user.id, nickname)
+
+    if (newContact) {
+      setContacts(prev => [...prev, newContact])
+      return true
+    }
+
+    return false
+  }
+
   return (
     <main className="h-dvh w-full max-w-md mx-auto flex flex-col bg-background overflow-hidden shadow-2xl">
       {selectedUserId && selectedUser ? (
@@ -420,6 +432,7 @@ export default function Home() {
           onCreateGroup={handleCreateGroup}
           onAcceptInvite={handleAcceptInvite}
           onRejectInvite={handleRejectInvite}
+          onDeleteConversation={handleDeleteConversation}
         />
       )}
     </main>

@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronUp, Ghost, Sparkles, Eye, EyeOff, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
+import { FloatingBubbles } from './floating-bubbles'
 
 interface WelcomeScreenProps {
   onComplete: () => void
@@ -134,6 +135,9 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
       </div>
+
+      {/* Floating Bubbles */}
+      <FloatingBubbles />
 
       {/* Content */}
       <div className="relative z-10 flex flex-col h-full px-4 pt-8 pb-6">
