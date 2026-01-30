@@ -16,9 +16,10 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 interface ChatViewProps {
   user: User
   onBack: () => void
+  onMessageSent?: (userId: string, lastMessage: Message) => void
 }
 
-export function ChatView({ user, onBack }: ChatViewProps) {
+export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [showProfile, setShowProfile] = useState(false)
   const [currentUserData, setCurrentUserData] = useState<CurrentUser | null>(null)
@@ -218,6 +219,9 @@ export function ChatView({ user, onBack }: ChatViewProps) {
       // Add to local state - forçar revelada para quem enviou
       const messageWithRevealed = { ...data, isRevealed: true }
       setMessages((prev) => [...prev, messageWithRevealed])
+
+      // Notificar que mensagem foi enviada (criar conversa)
+      onMessageSent?.(user.id, messageWithRevealed)
     } else {
       // Fallback: save locally
       console.error('Erro ao enviar mensagem via Supabase:', error)
@@ -273,7 +277,12 @@ export function ChatView({ user, onBack }: ChatViewProps) {
   }
 
   const handleExpire = async (messageId: string) => {
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+    console.log('🔴 handleExpire chamado para:', messageId)
+    setMessages((prev) => {
+      const filtered = prev.filter((msg) => msg.id !== messageId)
+      console.log('  Mensagens antes:', prev.length, '→ depois:', filtered.length)
+      return filtered
+    })
 
     // Notify tutorial if this is the tutorial bot
     if (isTutorialBot) {
@@ -283,6 +292,7 @@ export function ChatView({ user, onBack }: ChatViewProps) {
 
     // Delete from Supabase for regular users
     if (currentUserData?.id) {
+      console.log('  Deletando do Supabase...')
       await deleteMessage(messageId)
     }
   }
@@ -324,10 +334,10 @@ export function ChatView({ user, onBack }: ChatViewProps) {
             <MessageBubble
               key={message.id}
               message={message}
-              isOwn={message.senderId === 'current-user'}
+              isOwn={message.senderId === 'current-user' || (currentUserData?.id ? message.senderId === currentUserData.id : false)}
               onReveal={handleReveal}
               onExpire={handleExpire}
-              viewerNickname={currentUser.nickname}
+              viewerNickname={currentUserData?.nickname || currentUser.nickname}
             />
           ))
         )}

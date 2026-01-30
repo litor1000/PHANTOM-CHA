@@ -230,7 +230,7 @@ export function ConversationList({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-all',
+                'relative flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-all',
                 activeTab === tab.id
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
@@ -238,6 +238,9 @@ export function ConversationList({
             >
               <tab.icon className="w-3.5 h-3.5" />
               <span>{tab.label}</span>
+              {tab.id === 'chats' && conversations.some(c => c.unreadCount > 0) && (
+                <span className="absolute top-1 right-2 min-w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
+              )}
             </button>
           ))}
         </div>

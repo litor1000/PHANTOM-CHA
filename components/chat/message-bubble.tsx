@@ -110,7 +110,9 @@ export function MessageBubble({
       holdTimeoutRef.current = setTimeout(() => {
         setIsRevealed(true)
         setHoldProgress(100)
-        setCountdown(message.expiresIn ?? 5)
+        const expiresInSeconds = message.expiresIn ?? 10
+        console.log('⏱️ Mensagem revelada! Timer iniciado:', expiresInSeconds, 'segundos')
+        setCountdown(expiresInSeconds)
         setIsHolding(false)
         onReveal?.(message.id)
 
@@ -143,8 +145,10 @@ export function MessageBubble({
     }
 
     if (countdown === 0) {
+      console.log('💥 Mensagem expirada! ID:', message.id)
       setIsExpiring(true)
       setTimeout(() => {
+        console.log('🗑️ Removendo mensagem:', message.id)
         onExpire?.(message.id)
       }, 300)
     }
@@ -226,7 +230,7 @@ export function MessageBubble({
           ) : (
             <p
               className={cn(
-                'text-sm leading-relaxed transition-all duration-300',
+                'text-xl leading-relaxed transition-all duration-300',
                 showBlur && 'blur-lg select-none',
                 isHolding && !isRevealed && 'blur-sm'
               )}
@@ -258,20 +262,8 @@ export function MessageBubble({
             </div>
           )}
 
-          {/* Countdown Badge */}
-          {countdown !== null && countdown > 0 && (
-            <div
-              className={cn(
-                "absolute -top-3 -right-3 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium shadow-lg",
-                countdown <= 2
-                  ? "bg-destructive text-destructive-foreground"
-                  : "bg-primary text-primary-foreground"
-              )}
-            >
-              <Clock className="h-3 w-3" />
-              {countdown}s
-            </div>
-          )}
+          {/* Countdown Badge - REMOVIDO (timer continua funcionando em background) */}
+          {/* Timer de expiração funciona silenciosamente */}
         </div>
 
         {/* Time and Status */}

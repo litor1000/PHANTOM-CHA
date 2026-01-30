@@ -170,9 +170,6 @@ export async function deleteMessage(messageId: string): Promise<{ error: string 
     }
 }
 
-/**
- * Marca mensagens como lidas
- */
 export async function markMessagesAsRead(
     userId: string,
     otherUserId: string
@@ -199,5 +196,101 @@ export async function markMessagesAsRead(
     } catch (error) {
         console.error('Erro ao marcar mensagens como lidas:', error)
         return { error: 'Erro ao marcar mensagens como lidas' }
+    }
+}
+
+/**
+ * Carrega lista de conversas baseada nas mensagens
+ */
+export async function getUserConversations(userId: string): Promise<{ data: any[] | null; error: string | null }> {
+    try {
+        const supabase = getSupabaseClient()
+        if (!supabase) {
+            return { data: null, error: 'Supabase não configurado' }
+        }
+
+        // Buscar últimas 50 mensagens onde o usuário é remetente ou destinatário
+        // Incluindo dados dos usuários para montar a conversa
+        const { data: messages, error } = await supabase
+            .from('messages')
+            .select(`
+                *,
+                sender:sender_id(id, name, nickname, email, phone, avatar, profile_photo, cover_photo, is_online),
+                receiver:receiver_id(id, name, nickname, email, phone, avatar, profile_photo, cover_photo, is_online)
+            `)
+            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+            .order('created_at', { ascending: false })
+            .limit(50)
+
+        if (error) {
+            console.error('Erro ao carregar conversas:', error)
+            return { data: null, error: error.message }
+        }
+
+        const conversationsMap = new Map<string, any>()
+
+        messages.forEach((msg) => {
+            const isOwn = msg.sender_id === userId
+            const otherUser = isOwn ? msg.receiver : msg.sender
+
+            // Ignorar mensagens de sistema ou usuários inválidos
+            if (!otherUser) return
+
+            const otherUserId = otherUser.id
+
+            // Se já processamos esta conversa, apenas atualize contagens se necessário
+            // Como ordenamos por data desc, a primeira vez que encontramos um usuário
+            // é a mensagem mais recente (lastMessage)
+            if (!conversationsMap.has(otherUserId)) {
+
+                // Mapear usuário do banco para tipo User
+                const userObj = {
+                    id: otherUser.id,
+                    name: otherUser.name,
+                    nickname: otherUser.nickname,
+                    email: otherUser.email,
+                    phone: otherUser.phone,
+                    avatar: otherUser.avatar,
+                    profilePhoto: otherUser.profile_photo, // Mapeando campos extras
+                    coverPhoto: otherUser.cover_photo,
+                    isOnline: otherUser.is_online
+                }
+
+                // Mapear mensagem
+                const messageObj = {
+                    id: msg.id,
+                    content: msg.content,
+                    senderId: msg.sender_id,
+                    receiverId: msg.receiver_id,
+                    timestamp: new Date(msg.created_at),
+                    isRead: msg.is_read,
+                    isRevealed: msg.is_revealed,
+                    type: msg.type,
+                    imageUrl: msg.image_url,
+                    allowedNicknames: msg.allowed_nicknames,
+                    expiresIn: msg.expires_in,
+                }
+
+                conversationsMap.set(otherUserId, {
+                    id: `conv-${otherUserId}`,
+                    user: userObj,
+                    lastMessage: messageObj,
+                    unreadCount: (!isOwn && !msg.is_read) ? 1 : 0,
+                    isGroup: false
+                })
+            } else {
+                // Conversa já existe, apenas incrementar contador se for mensagem não lida
+                const conv = conversationsMap.get(otherUserId)
+                if (!isOwn && !msg.is_read) {
+                    conv.unreadCount += 1
+                }
+            }
+        })
+
+        return { data: Array.from(conversationsMap.values()), error: null }
+
+    } catch (error) {
+        console.error('Erro ao buscar conversas:', error)
+        return { data: null, error: 'Erro ao buscar conversas' }
     }
 }
