@@ -164,17 +164,56 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [user?.id])
 
-  // Reload contacts from Supabase on init
+  // Reload contacts from Supabase on init and sync local contacts
   useEffect(() => {
     if (user?.id && user.id !== 'current-user') {
-      const loadContacts = async () => {
-        const { getContacts } = await import('@/lib/supabase/contacts')
-        const { data } = await getContacts(user.id)
-        if (data) {
-          setContacts(data)
+      const loadAndSyncContacts = async () => {
+        const { getContacts, addContact } = await import('@/lib/supabase/contacts')
+
+        // 1. Fetch current DB contacts
+        const { data: dbContacts } = await getContacts(user.id)
+        let finalContacts = dbContacts || []
+
+        // 2. Check for local contacts (migration/sync)
+        const localKey = `phantom-contacts-${user.id}`
+        const localStr = localStorage.getItem(localKey)
+        let localContacts: User[] = []
+        if (localStr) {
+          try {
+            localContacts = JSON.parse(localStr)
+          } catch (e) {
+            console.error("Error parsing local contacts", e)
+          }
         }
+
+        // 3. If we have local contacts that are not in DB, sync them up
+        if (localContacts.length > 0) {
+          const dbNicknames = new Set(finalContacts.map(c => c.nickname.toLowerCase()))
+          const missingInDb = localContacts.filter(c => !dbNicknames.has(c.nickname.toLowerCase()))
+
+          if (missingInDb.length > 0) {
+            console.log(`Syncing ${missingInDb.length} local contacts to Supabase...`)
+
+            // Add them sequentially to ensure strict order/limits if needed
+            for (const contact of missingInDb) {
+              // We try to add by nickname. If the user doesn't exist in DB (was a mock user), 
+              // this might fail, effectively filtering out invalid mock data.
+              await addContact(user.id, contact.nickname)
+            }
+
+            // Refetch to get the updated list from DB source of truth
+            const { data: refetched } = await getContacts(user.id)
+            if (refetched) {
+              finalContacts = refetched
+            }
+          }
+        }
+
+        // 4. Update state
+        setContacts(finalContacts)
       }
-      loadContacts()
+
+      loadAndSyncContacts()
     }
   }, [user?.id])
 
