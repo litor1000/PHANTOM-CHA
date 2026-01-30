@@ -26,38 +26,6 @@ function formatTime(date: Date | string): string {
   })
 }
 
-function CircularProgress({ progress }: { progress: number }) {
-  const radius = 18
-  const circumference = 2 * Math.PI * radius
-  const strokeDashoffset = circumference - (progress / 100) * circumference
-
-  return (
-    <svg className="w-12 h-12 -rotate-90" viewBox="0 0 44 44">
-      <circle
-        cx="22"
-        cy="22"
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        className="text-muted/30"
-      />
-      <circle
-        cx="22"
-        cy="22"
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={strokeDashoffset}
-        className="text-primary transition-all duration-100"
-      />
-    </svg>
-  )
-}
-
 export function MessageBubble({
   message,
   isOwn,
@@ -66,71 +34,19 @@ export function MessageBubble({
   viewerNickname,
 }: MessageBubbleProps) {
   const [isRevealed, setIsRevealed] = useState(message.isRevealed)
-  const [isHolding, setIsHolding] = useState(false)
-  const [holdProgress, setHoldProgress] = useState(0)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isExpiring, setIsExpiring] = useState(false)
-  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const holdIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const HOLD_DURATION = 600 // ms to reveal
-
-  const startReveal = useCallback(() => {
+  const handleReveal = useCallback(() => {
     if (isRevealed || isOwn) return
-    setIsHolding(true)
-    setHoldProgress(0)
-  }, [isRevealed, isOwn])
 
-  const endReveal = useCallback(() => {
-    if (!isHolding) return
-    setIsHolding(false)
-    setHoldProgress(0)
-
-    if (holdTimeoutRef.current) {
-      clearTimeout(holdTimeoutRef.current)
-      holdTimeoutRef.current = null
-    }
-    if (holdIntervalRef.current) {
-      clearInterval(holdIntervalRef.current)
-      holdIntervalRef.current = null
-    }
-  }, [isHolding])
-
-  useEffect(() => {
-    if (isHolding && !isRevealed) {
-      const startTime = Date.now()
-
-      holdIntervalRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTime
-        const progress = Math.min((elapsed / HOLD_DURATION) * 100, 100)
-        setHoldProgress(progress)
-      }, 16)
-
-      holdTimeoutRef.current = setTimeout(() => {
-        setIsRevealed(true)
-        setHoldProgress(100)
-        const expiresInSeconds = message.expiresIn ?? 10
-        console.log('⏱️ Mensagem revelada! Timer iniciado:', expiresInSeconds, 'segundos')
-        setCountdown(expiresInSeconds)
-        setIsHolding(false)
-        onReveal?.(message.id)
-
-        if (holdIntervalRef.current) {
-          clearInterval(holdIntervalRef.current)
-        }
-      }, HOLD_DURATION)
-    }
-
-    return () => {
-      if (holdTimeoutRef.current) {
-        clearTimeout(holdTimeoutRef.current)
-      }
-      if (holdIntervalRef.current) {
-        clearInterval(holdIntervalRef.current)
-      }
-    }
-  }, [isHolding, isRevealed, message.id, onReveal])
+    setIsRevealed(true)
+    const expiresInSeconds = message.expiresIn ?? 10
+    console.log('⏱️ Mensagem revelada! Timer iniciado:', expiresInSeconds, 'segundos')
+    setCountdown(expiresInSeconds)
+    onReveal?.(message.id)
+  }, [isRevealed, isOwn, message.expiresIn, message.id, onReveal])
 
   useEffect(() => {
     if (countdown !== null && countdown > 0) {
@@ -160,7 +76,10 @@ export function MessageBubble({
     }
   }, [countdown, message.id, onExpire])
 
-  const showBlur = !isOwn && !isRevealed && !isHolding
+  const showBlur = !isOwn && !isRevealed
+
+  // Only show timer if strictly positive
+  const showTimer = countdown !== null && countdown > 0
 
   return (
     <div
@@ -176,29 +95,15 @@ export function MessageBubble({
           isOwn
             ? 'bg-message-sent text-foreground rounded-br-md'
             : 'bg-message-received text-foreground rounded-bl-md',
-          isHolding && !isOwn && 'scale-[1.03] shadow-xl shadow-primary/30 ring-2 ring-primary/50',
-          countdown !== null && countdown <= 2 && 'animate-pulse'
+          !isOwn && !isRevealed && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
+          countdown !== null && countdown <= 3 && 'animate-pulse'
         )}
-        onMouseDown={startReveal}
-        onMouseUp={endReveal}
-        onMouseLeave={endReveal}
-        onTouchStart={startReveal}
-        onTouchEnd={endReveal}
+        onClick={handleReveal}
         role={!isOwn && !isRevealed ? 'button' : undefined}
         tabIndex={!isOwn && !isRevealed ? 0 : undefined}
-        onKeyDown={(e) => {
-          if (e.key === ' ' || e.key === 'Enter') {
-            startReveal()
-          }
-        }}
-        onKeyUp={(e) => {
-          if (e.key === ' ' || e.key === 'Enter') {
-            endReveal()
-          }
-        }}
         aria-label={
           !isOwn && !isRevealed
-            ? 'Segure para revelar a mensagem'
+            ? 'Clique para revelar a mensagem'
             : undefined
         }
       >
@@ -231,8 +136,7 @@ export function MessageBubble({
             <p
               className={cn(
                 'text-xl leading-relaxed transition-all duration-300',
-                showBlur && 'blur-lg select-none',
-                isHolding && !isRevealed && 'blur-sm'
+                showBlur && 'blur-lg select-none'
               )}
             >
               {message.content}
@@ -247,30 +151,24 @@ export function MessageBubble({
                   <Sparkles className="h-5 w-5 animate-pulse" />
                   <Eye className="h-3 w-3 absolute -bottom-0.5 -right-0.5" />
                 </div>
-                <span className="text-[10px] font-medium tracking-wide">Segure para ver</span>
+                <span className="text-[10px] font-medium tracking-wide">Clique para ver</span>
               </div>
             </div>
           )}
 
-          {/* Hold Progress Indicator */}
-          {isHolding && !isRevealed && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="relative">
-                <CircularProgress progress={holdProgress} />
-                <Eye className="h-4 w-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary" />
-              </div>
+          {/* Countdown timer overlay (optional) */}
+          {showTimer && !isOwn && (
+            <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
+              <span className="text-[10px] font-bold text-primary">{countdown}</span>
             </div>
           )}
-
-          {/* Countdown Badge - REMOVIDO (timer continua funcionando em background) */}
-          {/* Timer de expiração funciona silenciosamente */}
         </div>
 
         {/* Time and Status */}
         <div
           className={cn(
             'flex items-center justify-end gap-1 mt-1 transition-all duration-300',
-            (showBlur || isHolding) && 'blur-sm opacity-50'
+            showBlur && 'blur-sm opacity-50'
           )}
         >
           <span className="text-[10px] text-muted-foreground">
