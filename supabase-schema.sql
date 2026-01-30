@@ -222,3 +222,49 @@ CREATE POLICY "Authenticated users can upload cover photos"
 CREATE POLICY "Users can update own cover photos"
   ON storage.objects FOR UPDATE
   USING (bucket_id = 'cover-photos' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ========================================
+-- TABELA: user_albums
+-- ========================================
+CREATE TABLE IF NOT EXISTS public.user_albums (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_albums_user ON public.user_albums(user_id);
+
+ALTER TABLE public.user_albums ENABLE ROW LEVEL SECURITY;
+
+-- Album photos: anyone can see (but frontend might blur), only owner can add/delete
+CREATE POLICY "Anyone can view album photos" 
+  ON public.user_albums FOR SELECT 
+  USING (true);
+
+CREATE POLICY "Users can add own album photos" 
+  ON public.user_albums FOR INSERT 
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own album photos" 
+  ON public.user_albums FOR DELETE 
+  USING (auth.uid() = user_id);
+
+
+-- STORAGE FOR ALBUMS
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('album-photos', 'album-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies para album-photos
+CREATE POLICY "Anyone can view album photos storage"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'album-photos');
+
+CREATE POLICY "Authenticated users can upload album photos storage"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'album-photos' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can delete own album photos storage"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'album-photos' AND auth.uid()::text = (storage.foldername(name))[1]);

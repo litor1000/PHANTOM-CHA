@@ -5,7 +5,7 @@ import type { Conversation, CurrentUser, User as UserType } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConversationItem } from './conversation-item'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { SettingsSheet } from '@/components/settings/settings-sheet'
@@ -55,9 +55,45 @@ export function ConversationList({
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<TabType>('chats')
+
   const [showSettings, setShowSettings] = useState(false)
   const [showAlbum, setShowAlbum] = useState(false)
   const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
+
+  // Load album when opening
+  useEffect(() => {
+    if (showAlbum && currentUser.id && currentUser.id !== 'current-user') {
+      const loadAlbum = async () => {
+        const { getUserAlbum } = await import('@/lib/supabase/album')
+        const { data } = await getUserAlbum(currentUser.id)
+        if (data) setAlbumPhotos(data)
+      }
+      loadAlbum()
+    }
+  }, [showAlbum, currentUser.id])
+
+  const handleUpdateAlbum = async (newPhotos: AlbumPhoto[]) => {
+    // Logic to determine add vs remove
+    // Ideally PhotoAlbum should emit separate events for add/remove, 
+    // but sticking to existing prop text for now.
+
+    // If length increased, it's an add (only if local component added optimistic).
+    // But PhotoAlbum's onUpdatePhotos is just a setter for local state usually.
+    // We need to change how PhotoAlbum works or intercept the change.
+
+    // Actually, looking at PhotoAlbum component code:
+    // It calls onUpdatePhotos([...photos, newPhoto]) for add
+    // It calls onUpdatePhotos(photos.filter(...)) for remove
+
+    // Since we want DB persistence, we should probably change PhotoAlbum props 
+    // OR handle the diff here (complex).
+    // BETTER: Update PhotoAlbum component to accept async handlers? 
+    // For now, let's keep it simple here by updating state, 
+    // but actually we need PhotoAlbum to call a real "onAdd" function.
+    // Wait, I can't change PhotoAlbum prop interface easily without changing the file.
+    // Let's modify PhotoAlbum component first to support upload/delete callbacks.
+    setAlbumPhotos(newPhotos)
+  }
   const [newContactNickname, setNewContactNickname] = useState('')
   const [searchResults, setSearchResults] = useState<UserType[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -516,6 +552,23 @@ export function ConversationList({
         pendingRequests={photoRequests}
         onApproveRequest={handleApproveRequest}
         onRejectRequest={handleRejectRequest}
+        onUploadPhoto={async (file) => {
+          const { uploadAlbumPhoto } = await import('@/lib/supabase/album')
+          const { data, error } = await uploadAlbumPhoto(currentUser.id, file)
+          if (error) {
+            toast({
+              variant: "destructive",
+              title: "Erro ao enviar foto",
+              description: "Não foi possível enviar sua foto. Tente novamente."
+            })
+            return null
+          }
+          return data
+        }}
+        onDeletePhoto={async (photoId) => {
+          const { deleteAlbumPhoto } = await import('@/lib/supabase/album')
+          await deleteAlbumPhoto(photoId)
+        }}
       />
     </div>
   )

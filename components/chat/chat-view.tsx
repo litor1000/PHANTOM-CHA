@@ -299,6 +299,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
   const handleRequestPhoto = (photoId: string) => {
     console.log('Solicitando acesso a foto:', photoId)
+    // Envia uma mensagem de solicitação
+    handleSend('🔒 Solicitei permissão para visualizar suas fotos do álbum.', 0)
   }
 
   return (

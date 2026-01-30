@@ -16,6 +16,8 @@ interface PhotoAlbumProps {
   pendingRequests: PhotoRequest[]
   onApproveRequest: (requestId: string) => void
   onRejectRequest: (requestId: string) => void
+  onUploadPhoto?: (file: File) => Promise<AlbumPhoto | null>
+  onDeletePhoto?: (photoId: string) => Promise<void>
 }
 
 export interface AlbumPhoto {
@@ -41,27 +43,43 @@ export function PhotoAlbum({
   pendingRequests,
   onApproveRequest,
   onRejectRequest,
+  onUploadPhoto,
+  onDeletePhoto,
 }: PhotoAlbumProps) {
   const [activeTab, setActiveTab] = useState<'album' | 'requests'>('album')
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleAddPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && photos.length < 6) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const newPhoto: AlbumPhoto = {
-          id: `photo-${Date.now()}`,
-          url: reader.result as string,
-          isBlurred: true,
+      if (onUploadPhoto) {
+        setIsUploading(true)
+        const newPhoto = await onUploadPhoto(file)
+        setIsUploading(false)
+        if (newPhoto) {
+          onUpdatePhotos([...photos, newPhoto])
         }
-        onUpdatePhotos([...photos, newPhoto])
+      } else {
+        // Local fallback
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const newPhoto: AlbumPhoto = {
+            id: `photo-${Date.now()}`,
+            url: reader.result as string,
+            isBlurred: true,
+          }
+          onUpdatePhotos([...photos, newPhoto])
+        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
     }
   }
 
-  const handleRemovePhoto = (photoId: string) => {
+  const handleRemovePhoto = async (photoId: string) => {
+    if (onDeletePhoto) {
+      await onDeletePhoto(photoId)
+    }
     onUpdatePhotos(photos.filter((p) => p.id !== photoId))
   }
 
@@ -155,10 +173,15 @@ export function PhotoAlbum({
                 {photos.length < 6 && (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={isUploading}
+                    className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Plus className="w-8 h-8" />
-                    <span className="text-xs">Adicionar</span>
+                    {isUploading ? (
+                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="w-8 h-8" />
+                    )}
+                    <span className="text-xs">{isUploading ? 'Enviando...' : 'Adicionar'}</span>
                   </button>
                 )}
               </div>
