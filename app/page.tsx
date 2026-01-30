@@ -7,7 +7,7 @@ import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
 import { mockConversations, mockUsers } from '@/lib/mock-data'
 import type { CurrentUser, Conversation, User } from '@/lib/types'
 import type { UserFormData } from '@/components/onboarding/auth-form-refactored'
-import { getCurrentUser, updateUserProfile } from '@/lib/supabase/auth'
+import { getCurrentUser, updateUserProfile, searchUserByNickname } from '@/lib/supabase/auth'
 import { uploadProfilePhoto, uploadCoverPhoto } from '@/lib/supabase/storage'
 
 export default function Home() {
@@ -18,7 +18,9 @@ export default function Home() {
   const [contacts, setContacts] = useState<User[]>([])
 
   const selectedUser = mockUsers.find((u) => u.id === selectedUserId) ||
-    conversations.find(c => c.user.id === selectedUserId)?.user
+    conversations.find(c => c.user.id === selectedUserId)?.user ||
+    contacts.find(c => c.id === selectedUserId)
+
 
   // Check for existing user session
   useEffect(() => {
@@ -28,12 +30,27 @@ export default function Home() {
 
       if (supabaseUser) {
         setUser(supabaseUser)
+        // Load user-specific contacts
+        const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
+        if (savedContacts) {
+          try {
+            setContacts(JSON.parse(savedContacts))
+          } catch { }
+        }
       } else {
         // Fallback to localStorage
         const savedUser = localStorage.getItem('phantom-user')
         if (savedUser) {
           try {
-            setUser(JSON.parse(savedUser))
+            const parsedUser = JSON.parse(savedUser)
+            setUser(parsedUser)
+            // Load user-specific contacts
+            const savedContacts = localStorage.getItem(`phantom-contacts-${parsedUser.id}`)
+            if (savedContacts) {
+              try {
+                setContacts(JSON.parse(savedContacts))
+              } catch { }
+            }
           } catch {
             localStorage.removeItem('phantom-user')
           }
@@ -50,13 +67,8 @@ export default function Home() {
         setConversations(mockConversations)
       }
 
-      // Load contacts
-      const savedContacts = localStorage.getItem('phantom-contacts')
-      if (savedContacts) {
-        try {
-          setContacts(JSON.parse(savedContacts))
-        } catch { }
-      }
+      // Load contacts (specific to current user)
+      // Contacts will be loaded after we know who the user is
 
       // Onboarding: create tutorial bot conversation on first access
       const onboarded = localStorage.getItem('phantom-onboarded')
@@ -80,7 +92,7 @@ export default function Home() {
         setConversations(newConvs)
         localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
         setContacts([TUTORIAL_BOT])
-        localStorage.setItem('phantom-contacts', JSON.stringify([TUTORIAL_BOT]))
+        // Tutorial bot contacts will be loaded per user later
         localStorage.setItem('phantom-onboarded', '1')
       }
 
@@ -98,7 +110,7 @@ export default function Home() {
         // Remove bot from contacts
         setContacts((prev) => {
           const filtered = prev.filter((contact) => contact.id !== 'bot-tutorial')
-          localStorage.setItem('phantom-contacts', JSON.stringify(filtered))
+          // Will be saved per user in handleAddContact
           return filtered
         })
       }
@@ -197,10 +209,24 @@ export default function Home() {
     setSelectedUserId(null)
   }
 
-  const handleAddContact = (nickname: string) => {
+  const handleAddContact = async (nickname: string) => {
     const cleanNick = nickname.replace('@', '').toLowerCase()
     if (contacts.some(c => c.nickname.toLowerCase() === cleanNick)) return true
 
+    // First, try to search in Supabase
+    const supabaseUser = await searchUserByNickname(cleanNick)
+
+    if (supabaseUser) {
+      const newContacts = [...contacts, supabaseUser]
+      setContacts(newContacts)
+      // Save contacts specific to current user
+      if (user?.id) {
+        localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(newContacts))
+      }
+      return true
+    }
+
+    // Fallback to mock users
     let found = mockUsers.find(u => u.nickname.toLowerCase() === cleanNick)
 
     if (!found) {
@@ -216,7 +242,10 @@ export default function Home() {
     if (found) {
       const newContacts = [...contacts, found]
       setContacts(newContacts)
-      localStorage.setItem('phantom-contacts', JSON.stringify(newContacts))
+      // Save contacts specific to current user
+      if (user?.id) {
+        localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(newContacts))
+      }
       return true
     }
     return false

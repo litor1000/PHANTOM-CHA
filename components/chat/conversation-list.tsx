@@ -57,6 +57,8 @@ export function ConversationList({
   const [showAlbum, setShowAlbum] = useState(false)
   const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
   const [newContactNickname, setNewContactNickname] = useState('')
+  const [searchResults, setSearchResults] = useState<UserType[]>([])
+  const [isSearching, setIsSearching] = useState(false)
 
   // Group creation state
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false)
@@ -96,22 +98,51 @@ export function ConversationList({
     contact.nickname.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const handleAddContactSubmit = (e: React.FormEvent) => {
+  const handleSearchUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (newContactNickname.trim() && onAddContact) {
-      const result = onAddContact(newContactNickname.trim())
+    if (!newContactNickname.trim()) return
+
+    setIsSearching(true)
+    setSearchResults([])
+
+    // Import searchUserByNickname dynamically
+    const { searchUserByNickname } = await import('@/lib/supabase/auth')
+    const user = await searchUserByNickname(newContactNickname.trim())
+
+    setIsSearching(false)
+
+    if (user) {
+      // Check if already in contacts
+      const alreadyAdded = contacts.some(c => c.id === user.id)
+      if (alreadyAdded) {
+        toast({
+          title: "Já está nos contatos",
+          description: `@${user.nickname} já está na sua lista de contatos.`,
+        })
+        setSearchResults([])
+      } else {
+        setSearchResults([user])
+      }
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Usuário não encontrado",
+        description: `Não encontramos nenhum usuário com o nickname @${newContactNickname}.`,
+      })
+      setSearchResults([])
+    }
+  }
+
+  const handleAddContact = (user: UserType) => {
+    if (onAddContact) {
+      const result = onAddContact(user.nickname)
       const success = typeof result === 'boolean' ? result : true
       if (success) {
         setNewContactNickname('')
+        setSearchResults([])
         toast({
           title: "Contato adicionado",
-          description: `O usuário @${newContactNickname} foi adicionado aos seus contatos.`,
-        })
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Usuário não encontrado",
-          description: `Não encontramos nenhum usuário com o nickname @${newContactNickname}.`,
+          description: `O usuário @${user.nickname} foi adicionado aos seus contatos.`,
         })
       }
     }
@@ -254,18 +285,59 @@ export function ConversationList({
         {activeTab === 'contacts' && (
           <div className="flex flex-col h-full">
             <div className="p-3 border-b border-border">
-              <form onSubmit={handleAddContactSubmit} className="flex gap-2">
+              <form onSubmit={handleSearchUser} className="flex gap-2">
                 <Input
-                  placeholder="Adicionar @nickname"
+                  placeholder="Buscar @nickname"
                   value={newContactNickname}
                   onChange={(e) => setNewContactNickname(e.target.value)}
                   className="bg-secondary border-0"
                 />
-                <Button type="submit" size="icon" disabled={!newContactNickname.trim()}>
-                  <Plus className="h-4 w-4" />
+                <Button type="submit" size="icon" disabled={!newContactNickname.trim() || isSearching}>
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
                 </Button>
               </form>
             </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="p-3 bg-secondary/30 border-b border-border">
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">RESULTADO DA BUSCA</h3>
+                {searchResults.map((user) => (
+                  <div key={user.id} className="flex items-center gap-3 p-3 bg-card rounded-md border border-border">
+                    <div className="relative w-10 h-10 rounded-full bg-secondary overflow-hidden border border-border">
+                      {user.avatar ? (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">
+                          {user.avatar}
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      {user.isOnline && (
+                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-foreground truncate">{user.name}</h3>
+                      <p className="text-xs text-muted-foreground truncate">@{user.nickname}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAddContact(user)}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Adicionar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto">
               {filteredContacts.length === 0 ? (

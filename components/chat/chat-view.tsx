@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import type { Message, User } from '@/lib/types'
+import type { Message, User, CurrentUser } from '@/lib/types'
 import { mockMessages } from '@/lib/mock-data'
 import { currentUser } from '@/lib/mock-data'
 import { ChatHeader } from './chat-header'
@@ -10,6 +10,8 @@ import { MessageInput } from './message-input'
 import { UserProfileView } from '@/components/profile/user-profile-view'
 import { useTutorial } from '@/hooks/use-tutorial'
 import { TUTORIAL_BOT_ID } from '@/lib/bot-data'
+import { sendMessage, loadMessages, revealMessage, deleteMessage } from '@/lib/supabase/messages'
+import { getCurrentUser } from '@/lib/supabase/auth'
 
 interface ChatViewProps {
   user: User
@@ -19,6 +21,7 @@ interface ChatViewProps {
 export function ChatView({ user, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [showProfile, setShowProfile] = useState(false)
+  const [currentUserData, setCurrentUserData] = useState<CurrentUser | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const storageKey = `phantom-messages-${user.id}`
   const isTutorialBot = user.id === TUTORIAL_BOT_ID
@@ -31,25 +34,99 @@ export function ChatView({ user, onBack }: ChatViewProps) {
     isTutorialCompleted
   } = useTutorial(isTutorialBot ? 'current-user' : null)
 
+  // Load current user
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const userData = await getCurrentUser()
+      setCurrentUserData(userData)
+    }
+    loadCurrentUser()
+  }, [])
+
   useEffect(() => {
     // Load messages
-    try {
-      const saved = localStorage.getItem(storageKey)
-      if (saved) {
-        setMessages(JSON.parse(saved))
-      } else {
-        setMessages(mockMessages[user.id] || [])
+    const loadMessagesData = async () => {
+      // Tutorial bot uses its own message system
+      if (isTutorialBot) {
+        try {
+          const saved = localStorage.getItem(storageKey)
+          if (saved) {
+            setMessages(JSON.parse(saved))
+          } else {
+            setMessages(mockMessages[user.id] || [])
+          }
+        } catch {
+          setMessages(mockMessages[user.id] || [])
+        }
+        handleConversationOpened()
+        return
       }
-    } catch {
-      setMessages(mockMessages[user.id] || [])
+
+      // Regular users: try Supabase first
+      if (currentUserData?.id) {
+        console.log('📥 Carregando mensagens:')
+        console.log('   Current User:', currentUserData.id, currentUserData.name)
+        console.log('   Other User:', user.id, user.name)
+
+        const { data, error } = await loadMessages(currentUserData.id, user.id)
+
+        if (data && !error) {
+          console.log('✅ Mensagens carregadas:', data.length)
+          // Importante: Marcar suas próprias mensagens como reveladas
+          const processedMessages = data.map(msg => ({
+            ...msg,
+            // Se EU enviei, deve aparecer revelada para mim
+            isRevealed: msg.senderId === currentUserData.id ? true : msg.isRevealed
+          }))
+          setMessages(processedMessages)
+          // Also cache locally
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(processedMessages))
+          } catch { }
+        } else {
+          console.log('❌ Erro ao carregar do Supabase:', error)
+          // Fallback to localStorage if Supabase fails
+          try {
+            const saved = localStorage.getItem(storageKey)
+            if (saved) {
+              setMessages(JSON.parse(saved))
+            }
+          } catch { }
+        }
+      }
     }
 
-    // If this is the tutorial bot, notify that conversation was opened
-    if (isTutorialBot) {
-      handleConversationOpened()
-    }
+    loadMessagesData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.id])
+  }, [user.id, currentUserData?.id])
+
+  // Polling: verificar novas mensagens a cada 3 segundos
+  useEffect(() => {
+    if (isTutorialBot || !currentUserData?.id) return
+
+    const interval = setInterval(async () => {
+      const { data, error } = await loadMessages(currentUserData.id, user.id)
+
+      if (data && !error) {
+        // Processar mensagens (suas reveladas, outras com estado original)
+        const processedMessages = data.map(msg => ({
+          ...msg,
+          isRevealed: msg.senderId === currentUserData.id ? true : msg.isRevealed
+        }))
+
+        // Só atualizar se houver mudança no número de mensagens
+        setMessages(prev => {
+          if (prev.length !== processedMessages.length) {
+            console.log('🔄 Nova mensagem recebida!')
+            return processedMessages
+          }
+          return prev
+        })
+      }
+    }, 3000) // A cada 3 segundos
+
+    return () => clearInterval(interval)
+  }, [user.id, currentUserData?.id, isTutorialBot])
 
   // Listen for tutorial stage changes
   useEffect(() => {
@@ -106,19 +183,57 @@ export function ChatView({ user, onBack }: ChatViewProps) {
     } catch { }
   }, [messages, storageKey, isTutorialBot])
 
-  const handleSend = (content: string, expiresIn?: number) => {
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      content,
-      senderId: 'current-user',
-      receiverId: user.id,
-      timestamp: new Date(),
-      isRead: false,
-      isRevealed: true,
-      expiresIn: expiresIn,
-      type: 'text',
+  const handleSend = async (content: string, expiresIn?: number) => {
+    // Tutorial bot: keep local behavior
+    if (isTutorialBot || !currentUserData?.id) {
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        content,
+        senderId: 'current-user',
+        receiverId: user.id,
+        timestamp: new Date(),
+        isRead: false,
+        isRevealed: true,
+        expiresIn: expiresIn,
+        type: 'text',
+      }
+      setMessages((prev) => [...prev, newMessage])
+      return
     }
-    setMessages((prev) => [...prev, newMessage])
+
+    // Regular users: send via Supabase
+    console.log('📤 Enviando mensagem:')
+    console.log('   Sender (quem envia):', currentUserData.id, currentUserData.name)
+    console.log('   Receiver (quem recebe):', user.id, user.name)
+
+    const { data, error } = await sendMessage({
+      content,
+      senderId: currentUserData.id,
+      receiverId: user.id,
+      type: 'text',
+      expiresIn: expiresIn || 10,
+    })
+
+    if (data && !error) {
+      // Add to local state - forçar revelada para quem enviou
+      const messageWithRevealed = { ...data, isRevealed: true }
+      setMessages((prev) => [...prev, messageWithRevealed])
+    } else {
+      // Fallback: save locally
+      console.error('Erro ao enviar mensagem via Supabase:', error)
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        content,
+        senderId: currentUserData.id,
+        receiverId: user.id,
+        timestamp: new Date(),
+        isRead: false,
+        isRevealed: true,
+        expiresIn: expiresIn,
+        type: 'text',
+      }
+      setMessages((prev) => [...prev, newMessage])
+    }
   }
 
   const handleSendPhoto = (photoData: string, mentions: string[], expiresIn?: number) => {
@@ -138,7 +253,7 @@ export function ChatView({ user, onBack }: ChatViewProps) {
     setMessages((prev) => [...prev, newMessage])
   }
 
-  const handleReveal = (messageId: string) => {
+  const handleReveal = async (messageId: string) => {
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === messageId ? { ...msg, isRevealed: true, isRead: true } : msg
@@ -148,15 +263,27 @@ export function ChatView({ user, onBack }: ChatViewProps) {
     // Notify tutorial if this is the tutorial bot
     if (isTutorialBot) {
       handleMessageRevealed(messageId)
+      return
+    }
+
+    // Update in Supabase for regular users
+    if (currentUserData?.id) {
+      await revealMessage(messageId)
     }
   }
 
-  const handleExpire = (messageId: string) => {
+  const handleExpire = async (messageId: string) => {
     setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
 
     // Notify tutorial if this is the tutorial bot
     if (isTutorialBot) {
       handleMessageExpired(messageId)
+      return
+    }
+
+    // Delete from Supabase for regular users
+    if (currentUserData?.id) {
+      await deleteMessage(messageId)
     }
   }
 
