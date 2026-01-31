@@ -43,6 +43,19 @@ export function MessageBubble({
   )
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Sync with server expiration if already revealed
+  useEffect(() => {
+    if (message.isRevealed && message.expiresAt && countdown === null && !isExpiring) {
+      const timeLeft = Math.ceil((new Date(message.expiresAt).getTime() - Date.now()) / 1000)
+      if (timeLeft > 0) {
+        setCountdown(timeLeft)
+        setIsRevealed(true)
+      } else {
+        setCountdown(0) // Will trigger expiration effect
+      }
+    }
+  }, [message.isRevealed, message.expiresAt, countdown, isExpiring])
+
   // Update request status if prop changes (e.g. from polling)
   useEffect(() => {
     if (message.metadata?.status && message.metadata.status !== requestStatus) {
@@ -55,7 +68,6 @@ export function MessageBubble({
 
     setIsRevealed(true)
     const expiresInSeconds = message.expiresIn ?? 10
-    console.log('⏱️ Mensagem revelada! Timer iniciado:', expiresInSeconds, 'segundos')
     setCountdown(expiresInSeconds)
     // onReveal?.(message.id) // Removed as per new interface
   }, [isRevealed, isOwn, message.expiresIn, message.id, message.type])
@@ -253,36 +265,4 @@ export function MessageBubble({
   )
 }
 
-{/* Countdown timer overlay (hidden as per user request) */ }
-{/* {showTimer && !isOwn && (
-             <div className="absolute -top-1 -right-1 bg-background/80 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center border border-border">
-                <span className="text-[10px] font-bold text-primary">{countdown}</span>
-             </div>
-          )} */}
-        </div >
 
-  {/* Time and Status */ }
-  < div
-className = {
-  cn(
-            'flex items-center justify-end gap-1 mt-1 transition-all duration-300',
-    showBlur && 'blur-sm opacity-50'
-          )}
-        >
-  <span className="text-[10px] text-muted-foreground">
-    {formatTime(message.timestamp)}
-  </span>
-{
-  isOwn && (
-    message.isRead ? (
-      <CheckCheck className="h-3.5 w-3.5 text-primary" />
-    ) : (
-      <Check className="h-3.5 w-3.5 text-muted-foreground" />
-    )
-  )
-}
-        </div >
-      </div >
-    </div >
-  )
-}

@@ -115,10 +115,11 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           isRevealed: msg.senderId === currentUserData.id ? true : msg.isRevealed
         }))
 
-        // Só atualizar se houver mudança no número de mensagens
+        // Atualizar se houver mudança no conteúdo (novas mensagens ou atualizações de metadados)
         setMessages(prev => {
-          if (prev.length !== processedMessages.length) {
-            console.log('🔄 Nova mensagem recebida!')
+          const hasChanges = JSON.stringify(prev) !== JSON.stringify(processedMessages)
+
+          if (hasChanges) {
             return processedMessages
           }
           return prev
@@ -299,7 +300,6 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   }
 
   const handleRequestPhoto = (photoId: string) => {
-    console.log('Solicitando acesso a foto:', photoId)
     // Envia uma mensagem de solicitação estruturada
     handleSend('🔒 Solicitei permissão para visualizar suas fotos do álbum.', 0, 'request', {
       photoId: photoId,

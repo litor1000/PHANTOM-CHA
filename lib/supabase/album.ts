@@ -130,18 +130,26 @@ export async function grantPhotoAccess(photoId: string, userIdToGrant: string): 
         const supabase = getSupabaseClient()
         if (!supabase) return { error: 'Supabase não configurado' }
 
-        // Fetch current allowed_viewers
+        const { data: { user } } = await supabase.auth.getUser()
+
+        // 1. Fetch current record to check ownership & existence
         const { data: photo, error: fetchError } = await supabase
             .from('user_albums')
-            .select('allowed_viewers')
+            .select('id, user_id, allowed_viewers')
             .eq('id', photoId)
             .single()
 
         if (fetchError) throw fetchError
 
+        // Verify ownership locally
+        if (photo.user_id !== user?.id) {
+            console.warn('WARNING: Current user is not the owner of this photo.')
+        }
+
         const currentViewers = photo.allowed_viewers || []
+
         if (currentViewers.includes(userIdToGrant)) {
-            return { error: null } // Already granted
+            return { error: null }
         }
 
         const updatedViewers = [...currentViewers, userIdToGrant]
@@ -156,6 +164,6 @@ export async function grantPhotoAccess(photoId: string, userIdToGrant: string): 
         return { error: null }
     } catch (error: any) {
         console.error('Erro ao conceder acesso:', error)
-        return { error: error.message }
+        return { error: error.message || 'Erro desconhecido' }
     }
 }

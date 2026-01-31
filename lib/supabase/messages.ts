@@ -70,6 +70,9 @@ export async function sendMessage(message: {
 /**
  * Carrega mensagens de uma conversa entre dois usuários
  */
+/**
+ * Carrega mensagens de uma conversa entre dois usuários
+ */
 export async function loadMessages(
     userId: string,
     otherUserId: string
@@ -80,6 +83,8 @@ export async function loadMessages(
             return { data: null, error: 'Supabase não configurado' }
         }
 
+        const now = new Date().toISOString()
+
         const { data, error } = await supabase
             .from('messages')
             .select('*')
@@ -87,28 +92,44 @@ export async function loadMessages(
                 `and(sender_id.eq.${userId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${userId})`
             )
             .order('created_at', { ascending: true })
+        // Filter out expired messages: (expires_at IS NULL OR expires_at > NOW)
+        // Note: We do this client-side or via complex query. 
+        // supabase-js .or() with nested conditions on top of existing .or() is tricky.
+        // Let's filter client-side for simplicity if volume is low, or try to chain filters.
 
         if (error) {
             console.error('Erro ao carregar mensagens:', error)
             return { data: null, error: error.message }
         }
 
-        // Converter para formato do app
-        const messages: Message[] = data.map((msg) => ({
-            id: msg.id,
-            content: msg.content,
-            senderId: msg.sender_id,
-            receiverId: msg.receiver_id,
-            timestamp: new Date(msg.created_at),
-            isRead: msg.is_read,
-            isRevealed: msg.is_revealed,
-            type: msg.type,
-            imageUrl: msg.image_url,
-            allowedNicknames: msg.allowed_nicknames,
-            expiresIn: msg.expires_in,
-            expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-            metadata: msg.metadata,
-        }))
+        // Converter para formato do app e filtrar expiradas
+        const messages: Message[] = data
+            .filter(msg => {
+                if (msg.expires_at) {
+                    return new Date(msg.expires_at) > new Date()
+                }
+                // If revealed but no expires_at (legacy), we keep it or expire it? 
+                // Let's keep it consistent: only expire if explicit.
+                // Or if the user wants "old messages to disappear", maybe we should hide revealed ones with no date?
+                // Let's filter out if is_revealed is true AND expires_at is older than 10s (assumed)
+                // For now, strict check on expires_at.
+                return true
+            })
+            .map((msg) => ({
+                id: msg.id,
+                content: msg.content,
+                senderId: msg.sender_id,
+                receiverId: msg.receiver_id,
+                timestamp: new Date(msg.created_at),
+                isRead: msg.is_read,
+                isRevealed: msg.is_revealed,
+                type: msg.type,
+                imageUrl: msg.image_url,
+                allowedNicknames: msg.allowed_nicknames,
+                expiresIn: msg.expires_in,
+                expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+                metadata: msg.metadata,
+            }))
 
         return { data: messages, error: null }
     } catch (error) {
@@ -118,7 +139,7 @@ export async function loadMessages(
 }
 
 /**
- * Marca uma mensagem como revelada
+ * Marca uma mensagem como revelada e define data de expiração
  */
 export async function revealMessage(messageId: string): Promise<{ error: string | null }> {
     try {
@@ -127,11 +148,24 @@ export async function revealMessage(messageId: string): Promise<{ error: string 
             return { error: 'Supabase não configurado' }
         }
 
+        // 1. Get current message to know expiresIn
+        const { data: msg, error: fetchError } = await supabase
+            .from('messages')
+            .select('expires_in')
+            .eq('id', messageId)
+            .single()
+
+        if (fetchError) throw fetchError
+
+        const expiresInSeconds = msg.expires_in || 10
+        const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+
         const { error } = await supabase
             .from('messages')
             .update({
                 is_revealed: true,
                 is_read: true,
+                expires_at: expiresAt
             })
             .eq('id', messageId)
 
