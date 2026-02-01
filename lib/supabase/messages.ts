@@ -29,7 +29,7 @@ export async function sendMessage(message: {
             allowed_nicknames: message.allowedNicknames,
             is_revealed: false, // Sempre começa oculta
             is_read: false,
-            expires_in: message.expiresIn || 10, // Padrão: 10 segundos
+            expires_in: message.expiresIn !== undefined ? message.expiresIn : 10, // Permite 0 (sem expiração)
             metadata: message.metadata // Novo campo
         }
 
@@ -88,17 +88,13 @@ export async function loadMessages(
         const { data, error } = await supabase
             .from('messages')
             .select('*')
-            .or(
-                `and(sender_id.eq.${userId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${userId})`
-            )
+            // Mensagens onde (sender=EU ou receiver=EU) E (sender=OUTRO ou receiver=OUTRO)
+            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+            .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
             .order('created_at', { ascending: true })
-        // Filter out expired messages: (expires_at IS NULL OR expires_at > NOW)
-        // Note: We do this client-side or via complex query. 
-        // supabase-js .or() with nested conditions on top of existing .or() is tricky.
-        // Let's filter client-side for simplicity if volume is low, or try to chain filters.
 
         if (error) {
-            console.error('Erro ao carregar mensagens:', error)
+            console.error('Erro ao carregar mensagens (Load):', JSON.stringify(error, null, 2))
             return { data: null, error: error.message }
         }
 
@@ -157,16 +153,24 @@ export async function revealMessage(messageId: string): Promise<{ error: string 
 
         if (fetchError) throw fetchError
 
-        const expiresInSeconds = msg.expires_in || 10
-        const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+        // Se expires_in for 0, significa que não expira (ex: foto paga)
+        const expiresInSeconds = msg.expires_in
+        let updateData: any = {
+            is_revealed: true,
+            is_read: true
+        }
+
+        if (expiresInSeconds && expiresInSeconds > 0) {
+            const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+            updateData.expires_at = expiresAt
+        } else {
+            // Garante que não tenha data de expiração
+            updateData.expires_at = null
+        }
 
         const { error } = await supabase
             .from('messages')
-            .update({
-                is_revealed: true,
-                is_read: true,
-                expires_at: expiresAt
-            })
+            .update(updateData)
             .eq('id', messageId)
 
         if (error) {
@@ -253,8 +257,8 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             .from('messages')
             .select(`
                 *,
-                sender:sender_id(id, name, nickname, email, phone, avatar, profile_photo, cover_photo, is_online),
-                receiver:receiver_id(id, name, nickname, email, phone, avatar, profile_photo, cover_photo, is_online)
+                sender:sender_id(id, name, nickname, email, phone, avatar, is_online),
+                receiver:receiver_id(id, name, nickname, email, phone, avatar, is_online)
             `)
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
             .order('created_at', { ascending: false })
@@ -289,8 +293,6 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
                     email: otherUser.email,
                     phone: otherUser.phone,
                     avatar: otherUser.avatar,
-                    profilePhoto: otherUser.profile_photo, // Mapeando campos extras
-                    coverPhoto: otherUser.cover_photo,
                     isOnline: otherUser.is_online
                 }
 

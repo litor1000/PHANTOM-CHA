@@ -38,8 +38,30 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   // Load current user
   useEffect(() => {
     const loadCurrentUser = async () => {
-      const userData = await getCurrentUser()
-      setCurrentUserData(userData)
+      const { getSupabaseClient } = await import('@/lib/supabase/client')
+      const supabase = getSupabaseClient()
+      if (supabase) {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (authUser) {
+          // Fetch profile + wallet
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authUser.id)
+            .single()
+
+          if (profile) {
+            const p = profile as any
+            setCurrentUserData({
+              ...p,
+              profilePhoto: p.profile_photo,
+              coverPhoto: p.cover_photo,
+              isOnline: p.is_online,
+              wallet_balance: p.wallet_balance // Load balance
+            })
+          }
+        }
+      }
     }
     loadCurrentUser()
   }, [])
@@ -242,21 +264,60 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     }
   }
 
-  const handleSendPhoto = (photoData: string, mentions: string[], expiresIn?: number) => {
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      content: '[Foto]',
-      senderId: 'current-user',
+  const handleSendPhoto = (photoData: string, mentions: string[], expiresIn?: number, price?: number) => {
+    const isPaid = price && price > 0
+
+    // Se for pago, não enviamos como 'image' comum que revela ao clicar.
+    // Enviamos como 'image' mas com metadata de preço.
+    // O MessageBubble vai ter que lidar com isso.
+
+    if (isTutorialBot || !currentUserData?.id) {
+      // Mock implementation
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        content: isPaid ? `[Foto Protegida - ${price} ₮]` : '[Foto]',
+        senderId: 'current-user',
+        receiverId: user.id,
+        timestamp: new Date(),
+        isRead: false,
+        isRevealed: true, // Sender sees it
+        expiresIn: expiresIn,
+        type: 'image',
+        imageUrl: photoData,
+        allowedNicknames: mentions,
+        metadata: isPaid ? { price, isLocked: true } : undefined
+      }
+      setMessages((prev) => [...prev, newMessage])
+      return
+    }
+
+    // Supabase implementation uses handleSend logic mostly, but specific for images
+    // We can reuse sendMessage from supabase/messages.ts which supports imageUrl
+
+    // We call logic similar to handleSend but correctly typing it
+    const metadata = isPaid ? { price, isLocked: true } : undefined
+
+    // Se for pago, expiração é 0 (infinito). Se for free, usa o valor passado ou 5s (padrão de fotos free)
+    const finalExpiresIn = isPaid ? 0 : (expiresIn || 5)
+
+    sendMessage({
+      content: isPaid ? '🔒 Foto Protegida' : '[Foto]',
+      senderId: currentUserData.id,
       receiverId: user.id,
-      timestamp: new Date(),
-      isRead: false,
-      isRevealed: true,
-      expiresIn: expiresIn,
       type: 'image',
       imageUrl: photoData,
+      expiresIn: finalExpiresIn,
       allowedNicknames: mentions,
-    }
-    setMessages((prev) => [...prev, newMessage])
+      metadata: metadata
+    }).then(({ data, error }) => {
+      if (data && !error) {
+        const messageWithRevealed = { ...data, isRevealed: true }
+        setMessages((prev) => [...prev, messageWithRevealed])
+        onMessageSent?.(user.id, messageWithRevealed)
+      } else {
+        console.error('Erro ao enviar foto:', error)
+      }
+    })
   }
 
   const handleReveal = async (messageId: string) => {
@@ -328,7 +389,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     const { getSupabaseClient } = await import('@/lib/supabase/client')
     const supabase = getSupabaseClient()
     if (supabase) {
-      await supabase.from('messages').update({
+      await (supabase.from('messages') as any).update({
         metadata: { ...metadata, status: 'accepted' }
       }).eq('id', messageId)
 
@@ -344,7 +405,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     const { getSupabaseClient } = await import('@/lib/supabase/client')
     const supabase = getSupabaseClient()
     if (supabase) {
-      await supabase.from('messages').update({
+      await (supabase.from('messages') as any).update({
         metadata: { ...metadata, status: 'rejected' }
       }).eq('id', messageId)
 
@@ -352,6 +413,79 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         ...m,
         metadata: { ...m.metadata, status: 'rejected' }
       } : m))
+    }
+  }
+
+  const handlePurchaseContent = async (messageId: string, price: number): Promise<boolean> => {
+    // 1. Call RPC
+    const { getSupabaseClient } = await import('@/lib/supabase/client')
+    const supabase = getSupabaseClient()
+
+    if (!supabase || !currentUserData?.id) return false
+
+    // We are buying from the SENDER of the message
+    const message = messages.find(m => m.id === messageId)
+    if (!message) return false
+
+    const sellerId = message.senderId
+    const description = `Compra de conteúdo: ${message.content.substring(0, 20)}...`
+
+    console.log(`💰 Processando compra: ${price} tokens de ${currentUserData.id} para ${sellerId}`)
+
+    const { data, error } = await (supabase.rpc as any)('purchase_content', {
+      p_receiver_id: sellerId,
+      p_amount: price,
+      p_description: description,
+      p_content_id: messageId // Optional
+    })
+
+    if (error) {
+      console.error('Erro na compra:', error)
+      alert(`Erro na compra: ${error.message}`)
+      return false
+    }
+
+    // Response format from RPC: { success: boolean, new_balance?: number, error?: string }
+    // Supabase RPC returns just the JSON body usually.
+
+    if (data && data.success) {
+      console.log('✅ Compra realizada com sucesso!', data)
+
+      // 2. Update Local Wallet Balance
+      if (data.new_balance !== undefined) {
+        setCurrentUserData(prev => prev ? ({ ...prev, wallet_balance: data.new_balance }) : null)
+      }
+
+      // 3. Update Message Status locally (and arguably in DB metatada)
+      // We should update the message metadata in DB so it persists as "paid" for this user?
+      // Wait, "paymentStatus" in metadata is shared for ALL users if in 'messages' table.
+      // If I buy it, it shouldn't show as 'paid' for everyone else if it's a group chat.
+      // But for DM, it works.
+      // Ideally, we have a 'receipts' table.
+      // For MVP, we'll update the message metadata assuming DMs.
+
+      const updatedMetadata: Message['metadata'] = {
+        ...message.metadata,
+        paymentStatus: 'paid' as const
+      }
+
+      // Update DB
+      await (supabase.from('messages') as any).update({
+        metadata: updatedMetadata
+      }).eq('id', messageId)
+
+      // Update Local
+      setMessages(prev => prev.map(m => m.id === messageId ? {
+        ...m,
+        metadata: updatedMetadata,
+        isRevealed: true // Reveal immediately
+      } : m))
+
+      return true
+    } else {
+      console.error('Falha na transação:', data?.error)
+      alert(`Falha: ${data?.error || 'Erro desconhecido'}`)
+      return false
     }
   }
 
@@ -394,6 +528,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
               viewerNickname={currentUserData?.nickname || currentUser.nickname}
               onAcceptRequest={handleAcceptRequest}
               onRejectRequest={handleRejectRequest}
+              onPurchase={handlePurchaseContent}
             />
           ))
         )}

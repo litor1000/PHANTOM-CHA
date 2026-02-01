@@ -4,12 +4,14 @@ import { Search, Settings, Ghost, User, MessageCircle, Users, UserPlus, Plus, Ch
 import type { Conversation, CurrentUser, User as UserType } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConversationItem } from './conversation-item'
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { SettingsSheet } from '@/components/settings/settings-sheet'
 import { PhotoAlbum, type AlbumPhoto, type PhotoRequest } from '@/components/profile/photo-album'
+import { WalletView } from '@/components/wallet/wallet-view'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +60,7 @@ export function ConversationList({
 
   const [showSettings, setShowSettings] = useState(false)
   const [showAlbum, setShowAlbum] = useState(false)
+  const [showWallet, setShowWallet] = useState(false)
   const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
 
   // Load album when opening
@@ -350,16 +353,13 @@ export function ConversationList({
                 <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">RESULTADO DA BUSCA</h3>
                 {searchResults.map((user) => (
                   <div key={user.id} className="flex items-center gap-3 p-3 bg-card rounded-md border border-border">
-                    <div className="relative w-10 h-10 rounded-full bg-secondary overflow-hidden border border-border">
-                      {user.avatar ? (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">
-                          {user.avatar}
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                      )}
+                    <div className="relative shrink-0">
+                      <Avatar className="w-10 h-10 border border-border">
+                        <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+                        <AvatarFallback className="bg-primary/20 text-primary text-xs font-medium">
+                          {user.name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       {user.isOnline && (
                         <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
                       )}
@@ -392,16 +392,13 @@ export function ConversationList({
                 <div className="divide-y divide-border/50">
                   {filteredContacts.map((contact) => (
                     <div key={contact.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors">
-                      <div className="relative w-10 h-10 rounded-full bg-card overflow-hidden border border-border">
-                        {contact.avatar ? (
-                          <div className="w-full h-full flex items-center justify-center text-2xl">
-                            {contact.avatar}
-                          </div>
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-muted-foreground" />
-                          </div>
-                        )}
+                      <div className="relative shrink-0">
+                        <Avatar className="w-10 h-10 border border-border">
+                          <AvatarImage src={contact.avatar || "/placeholder.svg"} alt={contact.name} />
+                          <AvatarFallback className="bg-primary/20 text-primary text-xs font-medium">
+                            {contact.name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
                         {contact.isOnline && (
                           <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
                         )}
@@ -541,6 +538,10 @@ export function ConversationList({
           setShowSettings(false)
           setShowAlbum(true)
         }}
+        onOpenWallet={() => {
+          setShowSettings(false)
+          setShowWallet(true)
+        }}
       />
 
       {/* Photo Album */}
@@ -569,6 +570,13 @@ export function ConversationList({
           const { deleteAlbumPhoto } = await import('@/lib/supabase/album')
           await deleteAlbumPhoto(photoId)
         }}
+      />
+
+      {/* Wallet View */}
+      <WalletView
+        isOpen={showWallet}
+        onClose={() => setShowWallet(false)}
+        currentUser={currentUser}
       />
     </div>
   )

@@ -8,17 +8,34 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import Image from "next/image"
+
 interface MessageInputProps {
   onSend: (content: string, expiresIn?: number) => void
-  onSendPhoto?: (photoData: string, mentions: string[], expiresIn?: number) => void
+  onSendPhoto?: (photoData: string, mentions: string[], expiresIn?: number, price?: number) => void
 }
 
 export function MessageInput({ onSend, onSendPhoto }: MessageInputProps) {
   const [message, setMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  // Fixed expiry time of 5 seconds for security
+
+  // Photo Price State
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
+  const [price, setPrice] = useState<string>('0')
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false)
+
+  // Fixed expiry time
   const EXPIRES_IN = 5
-  
+
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -54,107 +71,168 @@ export function MessageInput({ onSend, onSendPhoto }: MessageInputProps) {
 
   const handleEmojiSelect = (emoji: string) => {
     setMessage((prev) => prev + emoji)
-    // Need to wait for render to adjust height
     setTimeout(adjustHeight, 0)
     inputRef.current?.focus()
   }
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && onSendPhoto) {
+    if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
-        const text = message
-        const matches = Array.from(text.matchAll(/@([a-zA-Z0-9_]+)/g)).map(m => m[1].toLowerCase())
-        const mentions = Array.from(new Set(matches))
-        onSendPhoto(reader.result as string, mentions)
+        setSelectedPhoto(reader.result as string)
+        setIsPriceModalOpen(true)
       }
       reader.readAsDataURL(file)
     }
     e.target.value = ''
   }
 
+  const handleConfirmPhotoSend = () => {
+    if (selectedPhoto && onSendPhoto) {
+      const text = message
+      const matches = Array.from(text.matchAll(/@([a-zA-Z0-9_]+)/g)).map(m => m[1].toLowerCase())
+      const mentions = Array.from(new Set(matches))
+
+      const priceValue = parseInt(price) || 0
+      onSendPhoto(selectedPhoto, mentions, undefined, priceValue)
+
+      // Reset
+      setSelectedPhoto(null)
+      setPrice('0')
+      setIsPriceModalOpen(false)
+    }
+  }
+
   return (
-    <div className="flex items-end gap-2 px-3 py-3 bg-card border-t border-border">
-      <div className="relative">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 h-9 w-9 text-primary cursor-default hover:bg-transparent"
-          aria-label="Tempo de expiração fixo"
-          title="Mensagens expiram em 10s"
-        >
-          <Clock className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
-            5s
-          </span>
-        </Button>
-      </div>
+    <>
+      <div className="flex items-end gap-2 px-3 py-3 bg-card border-t border-border">
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 h-9 w-9 text-primary cursor-default hover:bg-transparent"
+            aria-label="Tempo de expiração fixo"
+            title="Mensagens expiram em 10s"
+          >
+            <Clock className="h-5 w-5" />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+              5s
+            </span>
+          </Button>
+        </div>
 
-      <div className="relative">
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9"
+            aria-label="Adicionar emoji"
+          >
+            <Smile className="h-5 w-5" />
+          </Button>
+          <EmojiPicker
+            isOpen={showEmojiPicker}
+            onClose={() => setShowEmojiPicker(false)}
+            onSelect={handleEmojiSelect}
+          />
+        </div>
+
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          onClick={() => photoInputRef.current?.click()}
           className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9"
-          aria-label="Adicionar emoji"
+          aria-label="Enviar foto"
         >
-          <Smile className="h-5 w-5" />
+          <Camera className="h-5 w-5" />
         </Button>
-        <EmojiPicker
-          isOpen={showEmojiPicker}
-          onClose={() => setShowEmojiPicker(false)}
-          onSelect={handleEmojiSelect}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoSelect}
         />
+
+        <div className="flex-1 relative">
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Mensagem secreta..."
+            rows={1}
+            className={cn(
+              'w-full resize-none rounded-2xl bg-secondary px-4 py-2.5',
+              'text-sm text-foreground placeholder:text-muted-foreground/60',
+              'focus:outline-none focus:ring-2 focus:ring-primary/50',
+              'max-h-32 overflow-y-auto'
+            )}
+            style={{
+              height: 'auto',
+              minHeight: '42px',
+            }}
+          />
+        </div>
+
+        <Button
+          size="icon"
+          onClick={handleSend}
+          disabled={!message.trim()}
+          className="shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full h-9 w-9 disabled:opacity-50"
+          aria-label="Enviar mensagem"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => photoInputRef.current?.click()}
-        className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9"
-        aria-label="Enviar foto"
-      >
-        <Camera className="h-5 w-5" />
-      </Button>
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handlePhotoSelect}
-      />
+      <Dialog open={isPriceModalOpen} onOpenChange={setIsPriceModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Foto</DialogTitle>
+          </DialogHeader>
 
-      <div className="flex-1 relative">
-        <textarea
-          ref={inputRef}
-          value={message}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Mensagem secreta..."
-          rows={1}
-          className={cn(
-            'w-full resize-none rounded-2xl bg-secondary px-4 py-2.5',
-            'text-sm text-foreground placeholder:text-muted-foreground/60',
-            'focus:outline-none focus:ring-2 focus:ring-primary/50',
-            'max-h-32 overflow-y-auto'
-          )}
-          style={{
-            height: 'auto',
-            minHeight: '42px',
-          }}
-        />
-      </div>
+          <div className="space-y-4 py-2">
+            <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black/5">
+              {selectedPhoto && (
+                <Image
+                  src={selectedPhoto}
+                  alt="Preview"
+                  fill
+                  className="object-contain" // contain keeps entire image visible without cropping
+                />
+              )}
+            </div>
 
-      <Button
-        size="icon"
-        onClick={handleSend}
-        disabled={!message.trim()}
-        className="shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full h-9 w-9 disabled:opacity-50"
-        aria-label="Enviar mensagem"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
-    </div>
+            <div className="space-y-2">
+              <Label>Definir Preço (Tokens)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₮</span>
+                <Input
+                  type="number"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="pl-8"
+                  placeholder="0 para Grátis"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se for 0, a foto será enviada gratuitamente. Se definir um valor, o destinatário precisará pagar para ver.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPriceModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleConfirmPhotoSend}>
+              Send {parseInt(price) > 0 ? `for ${price} ₮` : 'Free'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

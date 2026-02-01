@@ -2,7 +2,7 @@
 
 import { Eye } from 'lucide-react'
 import type { Conversation } from '@/lib/types'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 
 interface ConversationItemProps {
@@ -71,7 +71,8 @@ export function ConversationItem({ conversation, onClick, onDelete }: Conversati
           className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors text-left"
         >
           <div className="relative shrink-0">
-            <Avatar className="h-12 w-12">
+            <Avatar className="h-12 w-12 border border-border/10">
+              <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
               <AvatarFallback className="bg-primary/20 text-primary font-medium">
                 {getInitials(user.name)}
               </AvatarFallback>

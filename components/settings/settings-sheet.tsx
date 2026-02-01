@@ -14,9 +14,11 @@ import {
   Wallet,
   Images,
   ChevronRight,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { CurrentUser } from '@/lib/types'
 import Image from 'next/image'
@@ -29,6 +31,7 @@ interface SettingsSheetProps {
   onUpdateUser: (user: CurrentUser) => void
   onLogout: () => void
   onOpenAlbum: () => void
+  onOpenWallet: () => void
 }
 
 export function SettingsSheet({
@@ -38,6 +41,7 @@ export function SettingsSheet({
   onUpdateUser,
   onLogout,
   onOpenAlbum,
+  onOpenWallet,
 }: SettingsSheetProps) {
   const [isOnline, setIsOnline] = useState(user.isOnline ?? true)
   const profileInputRef = useRef<HTMLInputElement>(null)
@@ -72,6 +76,22 @@ export function SettingsSheet({
     onClose()
   }
 
+  const [tempPixKey, setTempPixKey] = useState(user.pix_key || '')
+  const [tempPixKeyType, setTempPixKeyType] = useState(user.pix_key_type || 'CPF')
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSavePix = async () => {
+    setIsSaving(true)
+    try {
+      await onUpdateUser({ ...user, pix_key: tempPixKey, pix_key_type: tempPixKeyType })
+      toast.success('Dados de pagamento atualizados!')
+    } catch (e) {
+      toast.error('Erro ao salvar')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -94,7 +114,7 @@ export function SettingsSheet({
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -179,6 +199,60 @@ export function SettingsSheet({
             />
           </div>
 
+          {/* Pix Key Settings */}
+          <div className={cn("px-4 py-4 border-b border-border/50", user.needs_pix_update ? "bg-orange-500/10" : "bg-muted/20")}>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Dados de Pagamento (Recebimento)</p>
+              {user.needs_pix_update && <Badge className="bg-orange-500 text-[8px] h-4">AÇÃO NECESSÁRIA</Badge>}
+            </div>
+
+            {user.needs_pix_update && (
+              <div className="mb-4 p-2 bg-orange-500/20 border border-orange-500/30 rounded-md flex gap-2">
+                <Info className="w-4 h-4 text-orange-600 shrink-0" />
+                <p className="text-[10px] text-orange-800 leading-tight">
+                  Seu último saque foi rejeitado por erro nos dados. Por favor, atualize sua chave Pix e salve para solicitar novamente.
+                </p>
+              </div>
+            )}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground px-1">Tipo de Chave Pix</label>
+                <select
+                  className="w-full h-9 bg-background border border-border rounded-md px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  value={tempPixKeyType}
+                  onChange={(e) => setTempPixKeyType(e.target.value)}
+                >
+                  <option value="CPF">CPF</option>
+                  <option value="Email">E-mail</option>
+                  <option value="Telefone">Telefone</option>
+                  <option value="Aleatoria">Chave Aleatória (EVP)</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground px-1">Chave Pix</label>
+                <input
+                  type="text"
+                  placeholder="Sua chave pix aqui"
+                  className="w-full h-9 bg-background border border-border rounded-md px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  value={tempPixKey}
+                  onChange={(e) => setTempPixKey(e.target.value)}
+                />
+              </div>
+
+              <Button
+                onClick={handleSavePix}
+                className="w-full h-8 text-xs bg-primary hover:bg-primary/90"
+                disabled={isSaving || (tempPixKey === user.pix_key && tempPixKeyType === user.pix_key_type)}
+              >
+                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+
+              <p className="text-[10px] text-muted-foreground px-1 italic">
+                * Mantenha atualizado para receber seus pagamentos.
+              </p>
+            </div>
+          </div>
+
           {/* Album de Fotos */}
           <button
             onClick={onOpenAlbum}
@@ -188,7 +262,7 @@ export function SettingsSheet({
               <Images className="w-5 h-5 text-primary" />
               <div className="text-left">
                 <p className="text-sm font-medium text-foreground">Album de Fotos</p>
-                <p className="text-xs text-muted-foreground">6 fotos com acesso privado</p>
+                <p className="text-xs text-muted-foreground">Gerenciar minhas fotos privadas</p>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -196,13 +270,14 @@ export function SettingsSheet({
 
           {/* Carteira */}
           <button
+            onClick={onOpenWallet}
             className="w-full px-4 py-3 flex items-center justify-between border-b border-border/50 hover:bg-secondary/50 transition-colors"
           >
             <div className="flex items-center gap-3">
               <Wallet className="w-5 h-5 text-amber-500" />
               <div className="text-left">
                 <p className="text-sm font-medium text-foreground">Carteira</p>
-                <p className="text-xs text-muted-foreground">0 tokens disponiveis</p>
+                <p className="text-xs text-muted-foreground">{user.wallet_balance || 0} tokens disponiveis</p>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />

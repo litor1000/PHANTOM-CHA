@@ -168,6 +168,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       profilePhoto: profile.profile_photo || null,
       coverPhoto: profile.cover_photo,
       isOnline: profile.is_online,
+      wallet_balance: profile.wallet_balance,
+      pix_key: profile.pix_key,
+      pix_key_type: profile.pix_key_type,
+      is_blocked: profile.is_blocked,
     }
   } catch (error) {
     console.error('Erro ao buscar usuário:', error)
@@ -190,6 +194,11 @@ export async function updateUserProfile(userId: string, updates: Partial<Current
     if (updates.profilePhoto !== undefined) updateData.profile_photo = updates.profilePhoto
     if (updates.coverPhoto !== undefined) updateData.cover_photo = updates.coverPhoto
     if (updates.isOnline !== undefined) updateData.is_online = updates.isOnline
+    if (updates.pix_key !== undefined) updateData.pix_key = updates.pix_key
+    if (updates.pix_key_type !== undefined) updateData.pix_key_type = updates.pix_key_type
+    if (updates.is_blocked !== undefined) updateData.is_blocked = updates.is_blocked
+
+    if (Object.keys(updateData).length === 0) return { error: null }
 
     const { error } = await supabase
       .from('users')
@@ -197,7 +206,7 @@ export async function updateUserProfile(userId: string, updates: Partial<Current
       .eq('id', userId)
 
     if (error) {
-      console.error('Erro ao atualizar perfil:', error)
+      console.error('Erro ao atualizar perfil (DB):', JSON.stringify(error, null, 2))
       return { error: error.message }
     }
 
@@ -232,6 +241,10 @@ export async function searchUserByNickname(nickname: string): Promise<User | nul
       coverPhoto: data.cover_photo,
       isOnline: data.is_online,
       lastSeen: data.last_seen ? new Date(data.last_seen) : undefined,
+      wallet_balance: data.wallet_balance,
+      pix_key: data.pix_key,
+      pix_key_type: data.pix_key_type,
+      is_blocked: data.is_blocked,
     }
   } catch (error) {
     console.error('Erro ao buscar usuário:', error)

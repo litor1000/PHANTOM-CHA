@@ -8,10 +8,27 @@ export interface User {
   coverPhoto?: string
   lastSeen?: Date
   isOnline?: boolean
+  wallet_balance?: number
+  pix_key?: string
+  pix_key_type?: string
+  is_blocked?: boolean
+  needs_pix_update?: boolean
 }
 
 export interface CurrentUser extends User {
   profilePhoto: string | null
+}
+
+export interface WithdrawalRequest {
+  id: string
+  user_id: string
+  user_name: string
+  user_nickname: string
+  amount: number
+  status: 'pending' | 'approved' | 'rejected'
+  pix_key: string
+  created_at: string
+  admin_comment?: string
 }
 
 export interface Message {
@@ -31,6 +48,10 @@ export interface Message {
     photoId?: string
     status?: 'pending' | 'accepted' | 'rejected'
     requestType?: 'album' | 'photo'
+    // Paid content fields
+    price?: number
+    isLocked?: boolean
+    paymentStatus?: 'pending' | 'paid'
   }
 }
 
