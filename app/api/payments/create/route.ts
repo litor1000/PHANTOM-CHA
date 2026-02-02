@@ -25,7 +25,10 @@ export async function POST(req: Request) {
         // 1. Criar o pagamento no Mercado Pago (PIX)
         const payment = new Payment(client)
 
-        const paymentData = {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+        const isLocalhost = appUrl.includes('localhost')
+
+        const paymentData: any = {
             body: {
                 transaction_amount: amount,
                 description: `Phantom Chat - Pacote de ${tokens} Tokens`,
@@ -34,9 +37,14 @@ export async function POST(req: Request) {
                     email: email || 'usuario@phantom.chat',
                     first_name: 'Usuario',
                     last_name: 'Phantom'
-                },
-                notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/webhook`,
+                }
             }
+        }
+
+        // O Mercado Pago exige uma URL pública para notificações. 
+        // Se estiver em localhost, não enviamos a URL para evitar erro na API do MP.
+        if (appUrl && !isLocalhost) {
+            paymentData.body.notification_url = `${appUrl}/api/payments/webhook`
         }
 
         const response = await payment.create(paymentData)
