@@ -28,21 +28,25 @@ export async function POST(req: Request) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
         const isLocalhost = appUrl.includes('localhost')
 
+        // Gerar uma chave de idempotência única para evitar erros de duplicidade
+        const idempotencyKey = `${Date.now()}-${userId}-${Math.floor(Math.random() * 1000)}`
+
         const paymentData: any = {
             body: {
                 transaction_amount: amount,
                 description: `Phantom Chat - Pacote de ${tokens} Tokens`,
                 payment_method_id: 'pix',
                 payer: {
-                    email: email || 'usuario@phantom.chat',
+                    // Em ambiente de teste, o Mercado Pago as vezes exige e-mails com formato específico
+                    email: isLocalhost ? 'test_user_123456@testuser.com' : (email || 'usuario@phantom.chat'),
                     first_name: 'Usuario',
                     last_name: 'Phantom'
                 }
-            }
+            },
+            requestOptions: { idempotencyKey }
         }
 
         // O Mercado Pago exige uma URL pública para notificações. 
-        // Se estiver em localhost, não enviamos a URL para evitar erro na API do MP.
         if (appUrl && !isLocalhost) {
             paymentData.body.notification_url = `${appUrl}/api/payments/webhook`
         }
