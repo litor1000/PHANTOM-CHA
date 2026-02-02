@@ -37,10 +37,15 @@ export async function POST(req: Request) {
                 description: `Phantom Chat - Pacote de ${tokens} Tokens`,
                 payment_method_id: 'pix',
                 payer: {
-                    // Em ambiente de teste, o Mercado Pago as vezes exige e-mails com formato específico
-                    email: isLocalhost ? 'test_user_123456@testuser.com' : (email || 'usuario@phantom.chat'),
-                    first_name: 'Usuario',
-                    last_name: 'Phantom'
+                    // PRIORIDADE: E-mail enviado no formulário
+                    // SE NÃO TIVER: E-mail de teste (evite usar o e-mail da sua conta vendedora)
+                    email: email || (isLocalhost ? 'phantom_test_payer@testuser.com' : 'usuario@phantom.chat'),
+                    first_name: 'Comprador',
+                    last_name: 'Teste',
+                    identification: {
+                        type: 'CPF',
+                        number: '19106353044' // CPF de teste padrão
+                    }
                 }
             },
             requestOptions: { idempotencyKey }
