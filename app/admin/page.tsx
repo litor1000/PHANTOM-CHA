@@ -26,6 +26,13 @@ export default function AdminPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [processingId, setProcessingId] = useState<string | null>(null)
     const [manualAmount, setManualAmount] = useState<string>('')
+    const [platformStats, setPlatformStats] = useState({
+        total_fee_collected: 0,
+        total_tokens_circulating: 0,
+        total_users: 0,
+        pending_withdrawals_count: 0,
+        pending_withdrawals_amount: 0
+    })
 
     // Modal states
     const [rejectModal, setRejectModal] = useState<{ isOpen: boolean, requestId: string, reason: string }>({ isOpen: false, requestId: '', reason: '' })
@@ -68,6 +75,11 @@ export default function AdminPage() {
             const supabase = getSupabaseClient()
             if (!supabase) return
 
+            // 1. Carregar estatísticas globais
+            const { data: statsData } = await (supabase.rpc as any)('admin_get_platform_stats')
+            if (statsData) setPlatformStats(statsData)
+
+            // 2. Carregar dados da aba ativa
             if (activeTab === 'users') {
                 const { data, error } = await supabase
                     .from('users')
@@ -280,9 +292,9 @@ export default function AdminPage() {
                         >
                             <Wallet className="w-4 h-4" />
                             Saques
-                            {pendingWithdrawalsCount > 0 && (
+                            {platformStats.pending_withdrawals_count > 0 && (
                                 <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
-                                    {pendingWithdrawalsCount}
+                                    {platformStats.pending_withdrawals_count}
                                 </span>
                             )}
                         </button>
@@ -290,32 +302,43 @@ export default function AdminPage() {
                 </div>
 
                 {/* Dashboard Highlights */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <Card className="bg-primary/5 border-primary/20 backdrop-blur-sm overflow-hidden relative group">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                             <TrendingUp className="w-16 h-16" />
                         </div>
                         <CardHeader className="pb-2">
                             <CardDescription className="text-primary/70 font-bold uppercase text-[10px] tracking-widest">Tokens em Circulação</CardDescription>
-                            <CardTitle className="text-3xl font-black">₮ {totalTokens.toLocaleString()}</CardTitle>
+                            <CardTitle className="text-4xl font-black italic tracking-tighter">₮ {platformStats.total_tokens_circulating.toLocaleString()}</CardTitle>
                         </CardHeader>
-                        <CardContent><p className="text-xs text-muted-foreground">Soma de todos os saldos de usuários</p></CardContent>
+                        <CardContent><p className="text-[10px] text-muted-foreground uppercase font-bold">Saldo total de tokens</p></CardContent>
+                    </Card>
+
+                    <Card className="bg-emerald-500/5 border-emerald-500/20 backdrop-blur-sm relative group overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <CheckCircle2 className="w-16 h-16 text-emerald-500" />
+                        </div>
+                        <CardHeader className="pb-2">
+                            <CardDescription className="text-emerald-500/70 font-bold uppercase text-[10px] tracking-widest">Comissão da Plataforma</CardDescription>
+                            <CardTitle className="text-4xl font-black text-emerald-500 italic tracking-tighter">₮ {platformStats.total_fee_collected.toLocaleString()}</CardTitle>
+                        </CardHeader>
+                        <CardContent><p className="text-[10px] text-muted-foreground uppercase font-bold">Lucro retido (20%)</p></CardContent>
                     </Card>
 
                     <Card className="bg-orange-500/5 border-orange-500/20 backdrop-blur-sm">
                         <CardHeader className="pb-2">
                             <CardDescription className="text-orange-500/70 font-bold uppercase text-[10px] tracking-widest">Saques Pendentes</CardDescription>
-                            <CardTitle className="text-3xl font-black">{pendingWithdrawalsCount} <span className="text-sm font-normal text-muted-foreground">solicitações</span></CardTitle>
+                            <CardTitle className="text-4xl font-black italic tracking-tighter">{platformStats.pending_withdrawals_count}</CardTitle>
                         </CardHeader>
-                        <CardContent><p className="text-xs text-muted-foreground">Total retido: ₮ {pendingWithdrawalsAmount.toLocaleString()}</p></CardContent>
+                        <CardContent><p className="text-[10px] text-muted-foreground uppercase font-bold italic">Total: ₮ {platformStats.pending_withdrawals_amount.toLocaleString()}</p></CardContent>
                     </Card>
 
                     <Card className="bg-secondary/40 border-border/40 backdrop-blur-sm">
                         <CardHeader className="pb-2">
                             <CardDescription className="text-muted-foreground font-bold uppercase text-[10px] tracking-widest">Total Usuários</CardDescription>
-                            <CardTitle className="text-3xl font-black">{users.length} <span className="text-sm font-normal text-muted-foreground">cadastrados</span></CardTitle>
+                            <CardTitle className="text-4xl font-black italic tracking-tighter">{platformStats.total_users}</CardTitle>
                         </CardHeader>
-                        <CardContent><p className="text-xs text-muted-foreground">{users.filter(u => u.isOnline).length} usuários online agora</p></CardContent>
+                        <CardContent><p className="text-[10px] text-muted-foreground uppercase font-bold italic">{users.filter(u => u.isOnline).length} usuários online</p></CardContent>
                     </Card>
                 </div>
 

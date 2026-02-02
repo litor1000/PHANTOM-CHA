@@ -10,7 +10,7 @@ import { MessageInput } from './message-input'
 import { UserProfileView } from '@/components/profile/user-profile-view'
 import { useTutorial } from '@/hooks/use-tutorial'
 import { TUTORIAL_BOT_ID } from '@/lib/bot-data'
-import { sendMessage, loadMessages, revealMessage, deleteMessage } from '@/lib/supabase/messages'
+import { sendMessage, loadMessages, revealMessage, deleteMessage, markMessagesAsRead } from '@/lib/supabase/messages'
 import { getCurrentUser } from '@/lib/supabase/auth'
 
 interface ChatViewProps {
@@ -102,6 +102,10 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             isRevealed: msg.senderId === currentUserData.id ? true : msg.isRevealed
           }))
           setMessages(processedMessages)
+
+          // Marcar como lidas no Supabase
+          markMessagesAsRead(currentUserData.id, user.id)
+
           // Also cache locally
           try {
             localStorage.setItem(storageKey, JSON.stringify(processedMessages))
@@ -142,6 +146,14 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           const hasChanges = JSON.stringify(prev) !== JSON.stringify(processedMessages)
 
           if (hasChanges) {
+            // Se houver novas mensagens do outro usuário, marcar como lidas
+            const hasNewReceived = processedMessages.length > prev.length &&
+              processedMessages[processedMessages.length - 1].senderId === user.id
+
+            if (hasNewReceived) {
+              markMessagesAsRead(currentUserData.id, user.id)
+            }
+
             return processedMessages
           }
           return prev

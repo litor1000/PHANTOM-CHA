@@ -15,6 +15,7 @@ import {
   Images,
   ChevronRight,
   Info,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -278,6 +279,23 @@ export function SettingsSheet({
               <div className="text-left">
                 <p className="text-sm font-medium text-foreground">Carteira</p>
                 <p className="text-xs text-muted-foreground">{user.wallet_balance || 0} tokens disponiveis</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+
+          {/* Instalar Aplicativo */}
+          <button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('phantom-open-install-prompt'))
+            }}
+            className="w-full px-4 py-3 flex items-center justify-between border-b border-border/50 hover:bg-secondary/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Download className="w-5 h-5 text-indigo-500" />
+              <div className="text-left">
+                <p className="text-sm font-medium text-foreground">Instalar Aplicativo</p>
+                <p className="text-xs text-muted-foreground">Usar o Phantom como um App</p>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />

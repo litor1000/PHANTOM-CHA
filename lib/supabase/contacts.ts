@@ -49,7 +49,7 @@ export async function addContact(userId: string, contactNickname: string): Promi
             nickname: contactUser.nickname,
             email: contactUser.email,
             phone: contactUser.phone,
-            avatar: contactUser.avatar || '',
+            avatar: contactUser.profile_photo || contactUser.avatar || '',
             coverPhoto: contactUser.cover_photo,
             isOnline: contactUser.is_online,
             lastSeen: contactUser.last_seen ? new Date(contactUser.last_seen) : undefined
@@ -89,7 +89,7 @@ export async function getContacts(userId: string): Promise<{ data: User[] | null
             nickname: item.contact.nickname,
             email: item.contact.email,
             phone: item.contact.phone,
-            avatar: item.contact.avatar || '',
+            avatar: item.contact.profile_photo || item.contact.avatar || '',
             coverPhoto: item.contact.cover_photo,
             isOnline: item.contact.is_online,
             lastSeen: item.contact.last_seen ? new Date(item.contact.last_seen) : undefined

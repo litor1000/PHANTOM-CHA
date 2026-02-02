@@ -98,6 +98,13 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
         }
     }
 
+    const [currentPaymentId, setCurrentPaymentId] = useState<string | null>(null)
+    const [isDev, setIsDev] = useState(false)
+
+    useEffect(() => {
+        setIsDev(window.location.hostname === 'localhost')
+    }, [])
+
     const handleBuyPackage = async (pkg: TokenPackage) => {
         try {
             setIsCreatingPayment(true)
@@ -120,6 +127,7 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
                     qrCode: data.qrCode,
                     qrCodeBase64: data.qrCodeBase64
                 })
+                setCurrentPaymentId(data.paymentId)
                 setView('pix')
             } else {
                 alert('Erro ao gerar Pix: ' + (data.error || 'Erro desconhecido'))
@@ -129,6 +137,87 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
             alert('Falha na comunicação com o servidor de pagamentos.')
         } finally {
             setIsCreatingPayment(false)
+        }
+    }
+
+    // Listener em tempo real para o status do pagamento
+    useEffect(() => {
+        if (view === 'pix' && currentPaymentId) {
+            let channel: any = null
+
+            const setupListener = async () => {
+                const { getSupabaseClient } = await import('@/lib/supabase/client')
+                const supabase = getSupabaseClient()
+                if (!supabase) return
+
+                channel = supabase
+                    .channel(`payment-${currentPaymentId}`)
+                    .on(
+                        'postgres_changes',
+                        {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'payments',
+                            filter: `id=eq.${currentPaymentId}`
+                        },
+                        (payload) => {
+                            if (payload.new.status === 'approved') {
+                                // O pagamento foi aprovado!
+                                alert('Pagamento aprovado com sucesso! Seus tokens foram creditados.')
+                                setView('balance')
+                                loadWalletData()
+                            }
+                        }
+                    )
+                    .subscribe()
+            }
+
+            setupListener()
+
+            return () => {
+                if (channel) {
+                    import('@/lib/supabase/client').then(({ getSupabaseClient }) => {
+                        const supabase = getSupabaseClient()
+                        if (supabase) supabase.removeChannel(channel)
+                    })
+                }
+            }
+        }
+    }, [view, currentPaymentId])
+
+    const simulateSuccess = async () => {
+        if (!currentPaymentId) {
+            alert('Aguarde o carregamento do Pix...')
+            return
+        }
+
+        try {
+            const { getSupabaseClient } = await import('@/lib/supabase/client')
+            const supabase = getSupabaseClient()
+            if (!supabase) return
+
+            console.log('Simulando aprovação para:', currentPaymentId)
+
+            // Chama a RPC diretamente
+            const { data, error } = await (supabase.rpc as any)('process_payment_success', {
+                p_payment_id: currentPaymentId
+            })
+
+            if (error) {
+                console.error('Erro RPC:', error)
+                alert('Erro ao processar no banco: ' + error.message)
+            } else if (data && !data.success) {
+                alert('Erro na lógica de pagamento: ' + data.error)
+            } else {
+                alert('Pagamento simulado com sucesso! Atualizando seu saldo...')
+
+                // Fallback: Se o Realtime demorar, forçamos a atualização aqui
+                setView('balance')
+                loadWalletData()
+            }
+        } catch (err: any) {
+            console.error('Erro catastrofico:', err)
+            alert('Falha na comunicação: ' + err.message)
         }
     }
 
@@ -314,6 +403,13 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
                             </div>
                             <div className="w-full space-y-3">
                                 <Button onClick={copyPixKey} className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-black rounded-2xl shadow-xl shadow-primary/20 uppercase italic text-sm">Copiar Pix Copia e Cola</Button>
+
+                                {isDev && (
+                                    <Button variant="outline" onClick={simulateSuccess} className="w-full border-dashed border-primary/50 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10">
+                                        Simular Aprovação (APENAS DEV)
+                                    </Button>
+                                )}
+
                                 <Button variant="ghost" onClick={() => setView('store')} className="w-full text-xs font-bold text-muted-foreground uppercase tracking-widest">Escolher outro pacote</Button>
                             </div>
                             <div className="p-4 rounded-2xl bg-secondary/20 border border-border/40 flex items-center gap-3">

@@ -257,8 +257,8 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             .from('messages')
             .select(`
                 *,
-                sender:sender_id(id, name, nickname, email, phone, avatar, is_online),
-                receiver:receiver_id(id, name, nickname, email, phone, avatar, is_online)
+                sender:sender_id(id, name, nickname, email, phone, avatar, profile_photo, is_online),
+                receiver:receiver_id(id, name, nickname, email, phone, avatar, profile_photo, is_online)
             `)
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
             .order('created_at', { ascending: false })
@@ -272,8 +272,12 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
         const conversationsMap = new Map<string, any>()
 
         messages.forEach((msg) => {
+            // Garante que pegamos o objeto correto, tratando se o Supabase retornar como array
+            const senderData = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender
+            const receiverData = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver
+
             const isOwn = msg.sender_id === userId
-            const otherUser = isOwn ? msg.receiver : msg.sender
+            const otherUser = isOwn ? receiverData : senderData
 
             // Ignorar mensagens de sistema ou usuários inválidos
             if (!otherUser) return
@@ -281,8 +285,6 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             const otherUserId = otherUser.id
 
             // Se já processamos esta conversa, apenas atualize contagens se necessário
-            // Como ordenamos por data desc, a primeira vez que encontramos um usuário
-            // é a mensagem mais recente (lastMessage)
             if (!conversationsMap.has(otherUserId)) {
 
                 // Mapear usuário do banco para tipo User
@@ -292,7 +294,7 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
                     nickname: otherUser.nickname,
                     email: otherUser.email,
                     phone: otherUser.phone,
-                    avatar: otherUser.avatar,
+                    avatar: otherUser.profile_photo || otherUser.avatar || '',
                     isOnline: otherUser.is_online
                 }
 

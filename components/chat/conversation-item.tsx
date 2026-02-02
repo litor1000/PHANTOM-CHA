@@ -24,12 +24,11 @@ interface ConversationItemProps {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function formatTime(date?: Date | string): string {
@@ -62,6 +61,14 @@ export function ConversationItem({ conversation, onClick, onDelete }: Conversati
   const hasUnread = unreadCount > 0
   const isFromMe = lastMessage?.senderId === 'current-user'
 
+  const isEmoji = (str: string) => {
+    if (!str) return false
+    // A more strict emoji check: just one or two characters that are likely an emoji
+    return str.length <= 4 && /\p{Emoji}/u.test(str) && !/^\d+$/.test(str)
+  }
+
+  const avatarContent = user.avatar && isEmoji(user.avatar) ? null : (user.avatar || "/placeholder.svg")
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
@@ -72,9 +79,15 @@ export function ConversationItem({ conversation, onClick, onDelete }: Conversati
         >
           <div className="relative shrink-0">
             <Avatar className="h-12 w-12 border border-border/10">
-              <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+              {avatarContent && avatarContent !== "/placeholder.svg" && (
+                <AvatarImage
+                  src={avatarContent}
+                  alt={user.name}
+                  className="object-cover"
+                />
+              )}
               <AvatarFallback className="bg-primary/20 text-primary font-medium">
-                {getInitials(user.name)}
+                {user.avatar && isEmoji(user.avatar) ? user.avatar : getInitials(user.name)}
               </AvatarFallback>
             </Avatar>
             {user.isOnline && (

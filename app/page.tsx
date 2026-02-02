@@ -9,6 +9,7 @@ import type { CurrentUser, Conversation, User, Message } from '@/lib/types'
 import type { UserFormData } from '@/components/onboarding/auth-form-refactored'
 import { getCurrentUser, updateUserProfile, searchUserByNickname } from '@/lib/supabase/auth'
 import { uploadProfilePhoto, uploadCoverPhoto } from '@/lib/supabase/storage'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 
 export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
@@ -451,6 +452,18 @@ export default function Home() {
     return false
   }
 
+  const handleSelectConversation = (userId: string) => {
+    setSelectedUserId(userId)
+
+    // Limpar contador de não lidas localmente para feedback imediato
+    setConversations(prev => prev.map(conv => {
+      if (conv.user.id === userId) {
+        return { ...conv, unreadCount: 0 }
+      }
+      return conv
+    }))
+  }
+
   return (
     <main className="h-dvh w-full max-w-md mx-auto flex flex-col bg-background overflow-hidden shadow-2xl">
       {selectedUserId && selectedUser ? (
@@ -462,7 +475,7 @@ export default function Home() {
       ) : (
         <ConversationList
           conversations={conversations}
-          onSelectConversation={setSelectedUserId}
+          onSelectConversation={handleSelectConversation}
           currentUser={user}
           onUpdateUser={handleUpdateUser}
           onLogout={handleLogout}
@@ -474,6 +487,7 @@ export default function Home() {
           onDeleteConversation={handleDeleteConversation}
         />
       )}
+      <InstallPrompt />
     </main>
   )
 }

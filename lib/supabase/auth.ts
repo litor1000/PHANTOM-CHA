@@ -237,7 +237,7 @@ export async function searchUserByNickname(nickname: string): Promise<User | nul
       nickname: data.nickname,
       email: data.email,
       phone: data.phone,
-      avatar: data.avatar,
+      avatar: data.profile_photo || data.avatar,
       coverPhoto: data.cover_photo,
       isOnline: data.is_online,
       lastSeen: data.last_seen ? new Date(data.last_seen) : undefined,

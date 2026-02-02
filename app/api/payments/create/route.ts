@@ -44,7 +44,7 @@ export async function POST(req: Request) {
                     last_name: 'Teste',
                     identification: {
                         type: 'CPF',
-                        number: '19106353044' // CPF de teste padrão
+                        number: '19106353088' // CPF de teste válido (calculado)
                     }
                 }
             },
@@ -83,9 +83,14 @@ export async function POST(req: Request) {
         })
 
     } catch (error: any) {
-        console.error('Erro ao criar pagamento:', error)
+        console.error('Erro ao criar pagamento no Mercado Pago:', error)
+
+        // Tenta extrair a mensagem de erro detalhada do Mercado Pago se existir
+        const errorMessage = error.cause?.[0]?.description || error.message || 'Erro interno ao processar Pix'
+
         return NextResponse.json({
-            error: error.message || 'Erro interno ao processar Pix'
+            error: errorMessage,
+            details: error.cause || null
         }, { status: 500 })
     }
 }
