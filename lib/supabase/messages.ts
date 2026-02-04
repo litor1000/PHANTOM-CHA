@@ -91,7 +91,8 @@ export async function loadMessages(
             // Mensagens onde (sender=EU ou receiver=EU) E (sender=OUTRO ou receiver=OUTRO)
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
             .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-            .order('created_at', { ascending: true })
+            .order('created_at', { ascending: false })
+            .limit(50) // LIMITAR para não dar Timeout
 
         if (error) {
             console.error('Erro ao carregar mensagens (Load):', JSON.stringify(error, null, 2))
@@ -99,33 +100,29 @@ export async function loadMessages(
         }
 
         // Converter para formato do app e filtrar expiradas
-        const messages: Message[] = data
-            .filter(msg => {
-                if (msg.expires_at) {
-                    return new Date(msg.expires_at) > new Date()
-                }
-                // If revealed but no expires_at (legacy), we keep it or expire it? 
-                // Let's keep it consistent: only expire if explicit.
-                // Or if the user wants "old messages to disappear", maybe we should hide revealed ones with no date?
-                // Let's filter out if is_revealed is true AND expires_at is older than 10s (assumed)
-                // For now, strict check on expires_at.
-                return true
-            })
-            .map((msg) => ({
-                id: msg.id,
-                content: msg.content,
-                senderId: msg.sender_id,
-                receiverId: msg.receiver_id,
-                timestamp: new Date(msg.created_at),
-                isRead: msg.is_read,
-                isRevealed: msg.is_revealed,
-                type: msg.type,
-                imageUrl: msg.image_url,
-                allowedNicknames: msg.allowed_nicknames,
-                expiresIn: msg.expires_in,
-                expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-                metadata: msg.metadata,
-            }))
+        const filteredData = data.filter(msg => {
+            // Se já tem data de expiração definida, verifica se já passou
+            if (msg.expires_at) {
+                return new Date(msg.expires_at).getTime() > Date.now()
+            }
+            return true
+        })
+
+        const messages: Message[] = filteredData.map((msg) => ({
+            id: msg.id,
+            content: msg.content,
+            senderId: msg.sender_id,
+            receiverId: msg.receiver_id,
+            timestamp: new Date(msg.created_at),
+            isRead: msg.is_read,
+            isRevealed: msg.is_revealed,
+            type: msg.type,
+            imageUrl: msg.image_url,
+            allowedNicknames: msg.allowed_nicknames,
+            expiresIn: msg.expires_in,
+            expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+            metadata: msg.metadata,
+        }))
 
         return { data: messages, error: null }
     } catch (error) {
@@ -251,27 +248,34 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             return { data: null, error: 'Supabase não configurado' }
         }
 
-        // Buscar últimas 50 mensagens onde o usuário é remetente ou destinatário
-        // Incluindo dados dos usuários para montar a conversa
         const { data: messages, error } = await supabase
             .from('messages')
             .select(`
                 *,
-                sender:sender_id(id, name, nickname, email, phone, avatar, profile_photo, is_online),
-                receiver:receiver_id(id, name, nickname, email, phone, avatar, profile_photo, is_online)
+                sender:sender_id(id, name, nickname, profile_photo, avatar, is_online),
+                receiver:receiver_id(id, name, nickname, profile_photo, avatar, is_online)
             `)
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
             .order('created_at', { ascending: false })
-            .limit(50)
+            .limit(100)
 
         if (error) {
-            console.error('Erro ao carregar conversas:', error)
+            console.error('❌ ERRO CRÍTICO SUPABASE:', error.message)
+            console.error('Detahes:', error.details)
             return { data: null, error: error.message }
         }
 
         const conversationsMap = new Map<string, any>()
 
-        messages.forEach((msg) => {
+        // Filtrar mensagens expiradas antes de processar conversas
+        const activeMessages = messages.filter(msg => {
+            if (msg.expires_at) {
+                return new Date(msg.expires_at).getTime() > Date.now()
+            }
+            return true
+        })
+
+        activeMessages.forEach((msg) => {
             // Garante que pegamos o objeto correto, tratando se o Supabase retornar como array
             const senderData = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender
             const receiverData = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver

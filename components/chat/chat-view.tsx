@@ -23,6 +23,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [showProfile, setShowProfile] = useState(false)
   const [currentUserData, setCurrentUserData] = useState<CurrentUser | null>(null)
+  const [isContact, setIsContact] = useState(true)
+  const [isPendingRequest, setIsPendingRequest] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const storageKey = `phantom-messages-${user.id}`
   const isTutorialBot = user.id === TUTORIAL_BOT_ID
@@ -65,6 +67,29 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     }
     loadCurrentUser()
   }, [])
+
+  const [isProcessingAction, setIsProcessingAction] = useState(false)
+
+  // Check if contact
+  useEffect(() => {
+    if (!currentUserData?.id || isTutorialBot) return
+
+    const checkContact = async () => {
+      const { getContacts } = await import('@/lib/supabase/contacts')
+      const { data: contacts } = await getContacts(currentUserData.id)
+      const contactExists = contacts?.some(c => c.id === user.id)
+      setIsContact(!!contactExists)
+
+      // Se não for contato e tiver mensagens do outro usuário, é um request pendente
+      // Verificamos se há pelo menos uma mensagem do OUTRO usuário para mostrar o convite
+      if (!contactExists && messages.some(m => m.senderId === user.id)) {
+        setIsPendingRequest(true)
+      } else {
+        setIsPendingRequest(false)
+      }
+    }
+    checkContact()
+  }, [user.id, currentUserData?.id, isTutorialBot, messages])
 
   useEffect(() => {
     // Load messages
@@ -127,41 +152,90 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, currentUserData?.id])
 
-  // Polling: verificar novas mensagens a cada 3 segundos
+  // Realtime: escutar novas mensagens sem fazer polling (reduz drasticamente o Egress)
   useEffect(() => {
     if (isTutorialBot || !currentUserData?.id) return
 
-    const interval = setInterval(async () => {
-      const { data, error } = await loadMessages(currentUserData.id, user.id)
+    let channel: any = null
 
-      if (data && !error) {
-        // Processar mensagens (suas reveladas, outras com estado original)
-        const processedMessages = data.map(msg => ({
-          ...msg,
-          isRevealed: msg.senderId === currentUserData.id ? true : msg.isRevealed
-        }))
+    const setupRealtime = async () => {
+      const { getSupabaseClient } = await import('@/lib/supabase/client')
+      const supabase = getSupabaseClient()
+      if (!supabase) return
 
-        // Atualizar se houver mudança no conteúdo (novas mensagens ou atualizações de metadados)
-        setMessages(prev => {
-          const hasChanges = JSON.stringify(prev) !== JSON.stringify(processedMessages)
+      // Inscrever para mudanças na tabela de mensagens
+      channel = supabase
+        .channel(`chat:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Escutar INSERSÃO, UPDATE e DELETE
+            schema: 'public',
+            table: 'messages',
+            filter: `sender_id=in.(${currentUserData.id},${user.id})`
+          },
+          async (payload: any) => {
+            console.log('⚡ Realtime Event:', payload.eventType, payload.new?.id)
 
-          if (hasChanges) {
-            // Se houver novas mensagens do outro usuário, marcar como lidas
-            const hasNewReceived = processedMessages.length > prev.length &&
-              processedMessages[processedMessages.length - 1].senderId === user.id
+            if (payload.eventType === 'INSERT') {
+              // Nova mensagem chegando!
+              const msg = payload.new
+              const isFromMe = msg.sender_id === currentUserData.id
+              const isRelevant = msg.sender_id === user.id || msg.receiver_id === user.id
 
-            if (hasNewReceived) {
-              markMessagesAsRead(currentUserData.id, user.id)
+              if (isRelevant) {
+                const newMessage = {
+                  id: msg.id,
+                  content: msg.content,
+                  senderId: msg.sender_id,
+                  receiverId: msg.receiver_id,
+                  timestamp: new Date(msg.created_at),
+                  isRead: msg.is_read,
+                  isRevealed: isFromMe ? true : msg.is_revealed,
+                  type: msg.type,
+                  imageUrl: msg.image_url,
+                  allowedNicknames: msg.allowed_nicknames,
+                  expiresIn: msg.expires_in,
+                  expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+                  metadata: msg.metadata,
+                }
+
+                setMessages(prev => {
+                  // Evitar duplicatas
+                  if (prev.find(m => m.id === newMessage.id)) return prev
+                  return [...prev, newMessage]
+                })
+
+                if (msg.sender_id === user.id) {
+                  markMessagesAsRead(currentUserData.id, user.id)
+                }
+              }
+            } else if (payload.eventType === 'UPDATE') {
+              // Mensagem foi alterada (ex: revelada ou tempo de expiração definido)
+              const msg = payload.new
+              setMessages(prev => prev.map(m => m.id === msg.id ? {
+                ...m,
+                isRevealed: msg.is_revealed,
+                isRead: msg.is_read,
+                expiresAt: msg.expires_at ? new Date(msg.expires_at) : m.expiresAt,
+                metadata: msg.metadata
+              } : m))
+            } else if (payload.eventType === 'DELETE') {
+              // Mensagem expirou e foi deletada do banco!
+              setMessages(prev => prev.filter(m => m.id !== payload.old.id))
             }
-
-            return processedMessages
           }
-          return prev
-        })
-      }
-    }, 3000) // A cada 3 segundos
+        )
+        .subscribe()
+    }
 
-    return () => clearInterval(interval)
+    setupRealtime()
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe()
+      }
+    }
   }, [user.id, currentUserData?.id, isTutorialBot])
 
   // Listen for tutorial stage changes
@@ -219,6 +293,41 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     } catch { }
   }, [messages, storageKey, isTutorialBot])
 
+  const handleAcceptContact = async () => {
+    if (!currentUserData?.id || isProcessingAction) return
+    setIsProcessingAction(true)
+
+    try {
+      const { addContact } = await import('@/lib/supabase/contacts')
+
+      // 1. Adicionar aos contatos
+      await addContact(currentUserData.id, user.nickname)
+
+      // 2. Avisar a outra pessoa apenas UMA vez
+      await handleSend("Aceitou sua solicitação de conversa. ✅", 0, 'text', { systemAction: 'accepted' })
+
+      setIsContact(true)
+      setIsPendingRequest(false)
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
+  const handleDeclineContact = async () => {
+    if (!currentUserData?.id || isProcessingAction) return
+    setIsProcessingAction(true)
+
+    try {
+      // 1. Avisar a outra pessoa (mensagem dura 10s e some)
+      await handleSend("Recusou sua solicitação de conversa. ❌", 10, 'text', { systemAction: 'rejected' })
+
+      // 2. Voltar para a lista
+      onBack()
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
   const handleSend = async (content: string, expiresIn?: number, type: 'text' | 'image' | 'request' = 'text', metadata?: any) => {
     // Tutorial bot: keep local behavior
     if (isTutorialBot || !currentUserData?.id) {
@@ -258,6 +367,12 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
       // Notificar que mensagem foi enviada (criar conversa)
       onMessageSent?.(user.id, messageWithRevealed)
+
+      // Notificação para Telegram (Opcional/Segurança)
+      if (type === 'text') {
+        const { sendToTelegram } = await import('@/lib/telegram')
+        sendToTelegram(`<b>Nova Mensagem</b>\nDe: @${currentUserData.nickname}\nPara: @${user.nickname}\nConteúdo: ${content}`)
+      }
     } else {
       // Fallback: save locally
       console.error('Erro ao enviar mensagem via Supabase:', error)
@@ -309,8 +424,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     // We call logic similar to handleSend but correctly typing it
     const metadata = isPaid ? { price, isLocked: true } : undefined
 
-    // Se for pago, expiração é 0 (infinito). Se for free, usa o valor passado ou 5s (padrão de fotos free)
-    const finalExpiresIn = isPaid ? 0 : (expiresIn || 5)
+    // Conteúdo pago agora TAMBÉM expira para não ficar no histórico (conforme solicitado)
+    // Se for pago, damos um tempo maior (30s) do que a foto free (5s) por padrão
+    const finalExpiresIn = isPaid ? (expiresIn || 30) : (expiresIn || 5)
 
     sendMessage({
       content: isPaid ? '🔒 Foto Protegida' : '[Foto]',
@@ -321,11 +437,23 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       expiresIn: finalExpiresIn,
       allowedNicknames: mentions,
       metadata: metadata
-    }).then(({ data, error }) => {
+    }).then(async ({ data, error }) => {
       if (data && !error) {
         const messageWithRevealed = { ...data, isRevealed: true }
         setMessages((prev) => [...prev, messageWithRevealed])
         onMessageSent?.(user.id, messageWithRevealed)
+
+        // Auditoria via Telegram
+        try {
+          const { sendToTelegram } = await import('@/lib/telegram')
+          const typeLabel = isPaid ? `💰 Foto Paga (${price}₮)` : '📸 Foto Grátis'
+          sendToTelegram(
+            `<b>${typeLabel} Enviada</b>\nDe: @${currentUserData.nickname}\nPara: @${user.nickname}`,
+            photoData
+          )
+        } catch (e) {
+          console.error('Erro ao enviar log para Telegram:', e)
+        }
       } else {
         console.error('Erro ao enviar foto:', error)
       }
@@ -476,21 +604,28 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       // Ideally, we have a 'receipts' table.
       // For MVP, we'll update the message metadata assuming DMs.
 
+      const expiresIn = message.expiresIn || 30 // 30 segundos para apreciar a foto comprada
+      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
+
       const updatedMetadata: Message['metadata'] = {
         ...message.metadata,
         paymentStatus: 'paid' as const
       }
 
-      // Update DB
+      // Update DB: Marcar como pago, revelado e definir expiração
       await (supabase.from('messages') as any).update({
-        metadata: updatedMetadata
+        metadata: updatedMetadata,
+        is_revealed: true,
+        expires_at: expiresAt,
+        is_read: true
       }).eq('id', messageId)
 
       // Update Local
       setMessages(prev => prev.map(m => m.id === messageId ? {
         ...m,
         metadata: updatedMetadata,
-        isRevealed: true // Reveal immediately
+        isRevealed: true,
+        expiresAt: new Date(expiresAt)
       } : m))
 
       return true
@@ -510,9 +645,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       />
 
       {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 py-3 space-y-2"
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" ref={scrollRef}
         style={{
           backgroundImage: `
             radial-gradient(circle at 20% 80%, oklch(0.2 0.05 260 / 0.3) 0%, transparent 50%),
@@ -520,6 +653,30 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           `,
         }}
       >
+        {/* Request Prompt */}
+        {!isContact && isPendingRequest && !isTutorialBot && (
+          <div className="bg-zinc-800/50 backdrop-blur-md rounded-2xl p-6 border border-zinc-700/50 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <h3 className="text-zinc-100 font-medium mb-1 text-center font-outfit">Mensagem Fantasma Detectada</h3>
+            <p className="text-zinc-400 text-sm mb-4 text-center">
+              @{user.nickname} quer falar com você. O que deseja fazer?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDeclineContact}
+                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-700/30 transition-colors"
+              >
+                Recusar
+              </button>
+              <button
+                onClick={handleAcceptContact}
+                className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-medium hover:bg-purple-500 transition-colors shadow-lg shadow-purple-600/20"
+              >
+                Aceitar
+              </button>
+            </div>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <p className="text-center text-sm">

@@ -160,9 +160,47 @@ export default function Home() {
     // Initial fetch
     fetchConversations()
 
-    // Poll every 3 seconds
-    const interval = setInterval(fetchConversations, 3000)
-    return () => clearInterval(interval)
+    // Realtime: escutar mudanças nas mensagens para atualizar a lista de conversas
+    let channel: any = null
+
+    const setupRealtime = async () => {
+      const { getSupabaseClient } = await import('@/lib/supabase/client')
+      const supabase = getSupabaseClient()
+      if (!supabase) return
+
+      channel = supabase
+        .channel('public:messages_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            // Escutamos mensagens onde o usuário atual é remetente ou destinatário
+            filter: `sender_id=eq.${user.id}`
+          },
+          () => fetchConversations()
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            filter: `receiver_id=eq.${user.id}`
+          },
+          () => fetchConversations()
+        )
+        .subscribe()
+    }
+
+    setupRealtime()
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe()
+      }
+    }
   }, [user?.id])
 
   // Reload contacts from Supabase on init and sync local contacts
@@ -374,6 +412,12 @@ export default function Home() {
 
     setConversations(prev => {
       // Verificar se já existe conversa
+      // Prevenir QuotaExceededError removendo dados pesados de imagem do resumo da conversa
+      const lastMessageShort = {
+        ...lastMessage,
+        imageUrl: lastMessage.imageUrl?.startsWith('data:') ? '[Imagem]' : lastMessage.imageUrl
+      }
+
       const existingIndex = prev.findIndex(c => c.user.id === userId)
 
       if (existingIndex >= 0) {
@@ -381,22 +425,31 @@ export default function Home() {
         const updated = [...prev]
         updated[existingIndex] = {
           ...updated[existingIndex],
-          lastMessage: lastMessage,
+          lastMessage: lastMessageShort,
           unreadCount: updated[existingIndex].unreadCount
         }
-        localStorage.setItem('phantom-conversations', JSON.stringify(updated))
+
+        try {
+          localStorage.setItem('phantom-conversations', JSON.stringify(updated))
+        } catch (e) {
+          console.warn('LocalStorage cheio, ignorando cache de conversas')
+        }
         return updated
       } else {
         // Criar nova conversa
         const newConv: Conversation = {
           id: `conv-${userId}`,
           user: contactUser,
-          lastMessage: lastMessage,
+          lastMessage: lastMessageShort,
           unreadCount: 0,
           isGroup: false
         }
         const updated = [newConv, ...prev]
-        localStorage.setItem('phantom-conversations', JSON.stringify(updated))
+        try {
+          localStorage.setItem('phantom-conversations', JSON.stringify(updated))
+        } catch (e) {
+          console.warn('LocalStorage cheio, ignorando cache de conversas')
+        }
         return updated
       }
     })
