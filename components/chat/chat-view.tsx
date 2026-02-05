@@ -23,6 +23,12 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [showProfile, setShowProfile] = useState(false)
   const [currentUserData, setCurrentUserData] = useState<CurrentUser | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const presenceChannelRef = useRef<any>(null)
+
+  const { getSupabaseClient } = require('@/lib/supabase/client')
+  const supabase = getSupabaseClient()
   const [isContact, setIsContact] = useState(true)
   const [isPendingRequest, setIsPendingRequest] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -231,10 +237,35 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
     setupRealtime()
 
+    // Presence channel for typing - Shared ID based on both users
+    const channelId = [currentUserData.id, user.id].sort().join('--')
+    const presenceChannel = supabase.channel(`typing:${channelId}`, {
+      config: { presence: { key: currentUserData.id } }
+    })
+    presenceChannelRef.current = presenceChannel
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState()
+        const others = Object.keys(state).filter(k => k !== currentUserData.id)
+        const isPeerTyping = others.some(k => (state[k] as any)[0]?.isTyping)
+        setIsTyping(isPeerTyping)
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }: { key: string, newPresences: any[] }) => {
+        if (key !== currentUserData.id && newPresences[0]?.isTyping) setIsTyping(true)
+      })
+      .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
+        if (key !== currentUserData.id) setIsTyping(false)
+      })
+      .subscribe(async (status: string) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({ isTyping: false })
+        }
+      })
+
     return () => {
-      if (channel) {
-        channel.unsubscribe()
-      }
+      if (channel) channel.unsubscribe()
+      if (presenceChannel) presenceChannel.unsubscribe()
     }
   }, [user.id, currentUserData?.id, isTutorialBot])
 
@@ -428,12 +459,17 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     // Se for pago, damos um tempo maior (30s) do que a foto free (5s) por padrão
     const finalExpiresIn = isPaid ? (expiresIn || 30) : (expiresIn || 5)
 
+    const isVideo = photoData.startsWith('data:video/')
+    const isGif = photoData.startsWith('data:image/gif')
+    const contentType = isVideo ? 'video' : 'image'
+
     sendMessage({
-      content: isPaid ? '🔒 Foto Protegida' : '[Foto]',
+      content: isPaid ? (isVideo ? '🔒 Vídeo Protegido' : '🔒 Foto Protegida') : (isVideo ? '[Vídeo]' : '[Foto]'),
       senderId: currentUserData.id,
       receiverId: user.id,
-      type: 'image',
-      imageUrl: photoData,
+      type: contentType,
+      imageUrl: isVideo ? undefined : photoData,
+      videoUrl: isVideo ? photoData : undefined,
       expiresIn: finalExpiresIn,
       allowedNicknames: mentions,
       metadata: metadata
@@ -458,6 +494,37 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         console.error('Erro ao enviar foto:', error)
       }
     })
+  }
+
+  const handleSendAudio = (audioData: string) => {
+    if (!currentUserData?.id) return
+
+    // Audio always auto-destroys in 10s by default
+    sendMessage({
+      content: '🎵 Nota de voz',
+      senderId: currentUserData.id,
+      receiverId: user.id,
+      type: 'audio',
+      audioUrl: audioData,
+      expiresIn: 10,
+    }).then(({ data, error }) => {
+      if (data && !error) {
+        const messageWithRevealed = { ...data, isRevealed: true }
+        setMessages((prev) => [...prev, messageWithRevealed])
+        onMessageSent?.(user.id, messageWithRevealed)
+      }
+    })
+  }
+
+  const handleTyping = (isTyping: boolean) => {
+    if (!currentUserData?.id || isTutorialBot || !presenceChannelRef.current) return
+
+    // Canal específico do chat (para o indicador interno)
+    presenceChannelRef.current.track({ isTyping })
+
+    // Canal global (para a lista de conversas)
+    const { updateTypingStatus } = require('@/lib/supabase/presence')
+    updateTypingStatus(currentUserData.id, isTyping ? user.id : null)
   }
 
   const handleReveal = async (messageId: string) => {
@@ -557,7 +624,6 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   }
 
   const handlePurchaseContent = async (messageId: string, price: number): Promise<boolean> => {
-    // 1. Call RPC
     const { getSupabaseClient } = await import('@/lib/supabase/client')
     const supabase = getSupabaseClient()
 
@@ -576,7 +642,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       p_receiver_id: sellerId,
       p_amount: price,
       p_description: description,
-      p_content_id: messageId // Optional
+      p_content_id: messageId
     })
 
     if (error) {
@@ -585,26 +651,14 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       return false
     }
 
-    // Response format from RPC: { success: boolean, new_balance?: number, error?: string }
-    // Supabase RPC returns just the JSON body usually.
-
     if (data && data.success) {
       console.log('✅ Compra realizada com sucesso!', data)
 
-      // 2. Update Local Wallet Balance
       if (data.new_balance !== undefined) {
         setCurrentUserData(prev => prev ? ({ ...prev, wallet_balance: data.new_balance }) : null)
       }
 
-      // 3. Update Message Status locally (and arguably in DB metatada)
-      // We should update the message metadata in DB so it persists as "paid" for this user?
-      // Wait, "paymentStatus" in metadata is shared for ALL users if in 'messages' table.
-      // If I buy it, it shouldn't show as 'paid' for everyone else if it's a group chat.
-      // But for DM, it works.
-      // Ideally, we have a 'receipts' table.
-      // For MVP, we'll update the message metadata assuming DMs.
-
-      const expiresIn = message.expiresIn || 30 // 30 segundos para apreciar a foto comprada
+      const expiresIn = message.expiresIn || 30
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
       const updatedMetadata: Message['metadata'] = {
@@ -612,7 +666,6 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         paymentStatus: 'paid' as const
       }
 
-      // Update DB: Marcar como pago, revelado e definir expiração
       await (supabase.from('messages') as any).update({
         metadata: updatedMetadata,
         is_revealed: true,
@@ -620,7 +673,6 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         is_read: true
       }).eq('id', messageId)
 
-      // Update Local
       setMessages(prev => prev.map(m => m.id === messageId ? {
         ...m,
         metadata: updatedMetadata,
@@ -631,9 +683,45 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       return true
     } else {
       console.error('Falha na transação:', data?.error)
-      alert(`Falha: ${data?.error || 'Erro desconhecido'}`)
+      alert(`Falha: ${data?.error || 'Saldo insuficiente'}`)
       return false
     }
+  }
+
+  const handlePurchasePhoto = async (photoId: string, price: number): Promise<boolean> => {
+    const { getSupabaseClient } = await import('@/lib/supabase/client')
+    const supabase = getSupabaseClient()
+    if (!supabase || !currentUserData?.id) return false
+
+    console.log(`💰 Comprando FOTO do ÁLBUM: ${price} tokens de ${currentUserData.id} para ${user.id}`)
+
+    const { data, error } = await (supabase.rpc as any)('purchase_content', {
+      p_receiver_id: user.id,
+      p_amount: price,
+      p_description: `Compra de foto do álbum: ${photoId}`,
+      p_content_id: photoId
+    })
+
+    if (error) {
+      console.error('Erro na compra da foto:', error)
+      alert(`Erro na compra: ${error.message}`)
+      return false
+    }
+
+    if (data && data.success) {
+      const { grantPhotoAccess } = await import('@/lib/supabase/album')
+      await grantPhotoAccess(photoId, currentUserData.id)
+
+      if (data.new_balance !== undefined) {
+        setCurrentUserData(prev => prev ? ({ ...prev, wallet_balance: data.new_balance }) : null)
+      }
+
+      alert('Foto desbloqueada com sucesso! Clique para ver.')
+      return true
+    }
+
+    alert(`Falha: ${data?.error || 'Saldo insuficiente'}`)
+    return false
   }
 
   return (
@@ -703,7 +791,30 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         )}
       </div>
 
-      <MessageInput onSend={handleSend} onSendPhoto={handleSendPhoto} />
+      <div className="px-4 py-1 flex items-center justify-start h-6">
+        {isTyping && (
+          <div className="flex items-center gap-1.5 text-primary animate-pulse">
+            <div className="flex gap-0.5">
+              <div className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-1 h-1 rounded-full bg-current animate-bounce" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider italic">Digitando...</span>
+          </div>
+        )}
+      </div>
+
+      <MessageInput
+        onSend={(content) => {
+          handleSend(content)
+          handleTyping(false)
+        }}
+        onSendPhoto={(photoData, mentions, expiresIn, price) => {
+          handleSendPhoto(photoData, mentions, expiresIn, price)
+        }}
+        onSendAudio={handleSendAudio}
+        onTyping={handleTyping}
+      />
 
       <UserProfileView
         isOpen={showProfile}
@@ -711,6 +822,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         user={user}
         onSendMessage={() => setShowProfile(false)}
         onRequestPhoto={handleRequestPhoto}
+        onPurchasePhoto={handlePurchasePhoto}
       />
     </div>
   )

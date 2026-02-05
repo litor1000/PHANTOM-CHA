@@ -4,11 +4,6 @@ import { Eye } from 'lucide-react'
 import type { Conversation } from '@/lib/types'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-
-interface ConversationItemProps {
-  conversation: Conversation
-  onClick: () => void
-}
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +16,7 @@ interface ConversationItemProps {
   conversation: Conversation
   onClick: () => void
   onDelete?: (conversationId: string) => void
+  isTyping?: boolean
 }
 
 function getInitials(name: string): string {
@@ -56,7 +52,7 @@ function formatTime(date?: Date | string): string {
   })
 }
 
-export function ConversationItem({ conversation, onClick, onDelete }: ConversationItemProps) {
+export function ConversationItem({ conversation, onClick, onDelete, isTyping }: ConversationItemProps) {
   const { user, lastMessage, unreadCount } = conversation
   const hasUnread = unreadCount > 0
   const isFromMe = lastMessage?.senderId === 'current-user'
@@ -114,15 +110,21 @@ export function ConversationItem({ conversation, onClick, onDelete }: Conversati
             </div>
 
             <div className="flex items-center justify-between gap-2 mt-0.5">
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
-                {isFromMe && <span className="text-xs">Você:</span>}
-                {lastMessage && !lastMessage.isRevealed && !isFromMe ? (
-                  <span className="flex items-center gap-1 italic">
-                    <Eye className="h-3.5 w-3.5" />
-                    Mensagem secreta
-                  </span>
+              <div className="flex items-center gap-1.5 text-sm truncate">
+                {isTyping ? (
+                  <span className="text-primary font-medium animate-pulse">digitando...</span>
                 ) : (
-                  <span className="truncate">{lastMessage?.content || 'Sem mensagens'}</span>
+                  <>
+                    {isFromMe && <span className="text-xs text-muted-foreground">Você:</span>}
+                    {lastMessage && !lastMessage.isRevealed && !isFromMe ? (
+                      <span className="flex items-center gap-1 italic text-muted-foreground">
+                        <Eye className="h-3.5 w-3.5" />
+                        Mensagem secreta
+                      </span>
+                    ) : (
+                      <span className="truncate text-muted-foreground">{lastMessage?.content || 'Sem mensagens'}</span>
+                    )}
+                  </>
                 )}
               </div>
 

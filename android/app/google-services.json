@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "971248636619",
+    "project_id": "phantomchat-79b14",
+    "storage_bucket": "phantomchat-79b14.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:971248636619:android:972a8e3b0b64611975c14e",
+        "android_client_info": {
+          "package_name": "chat.phantom.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBs2HUx9bFbnOBHdTpB7TCxdc3y4yvbTm8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

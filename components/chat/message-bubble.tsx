@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Eye, Clock, Check, CheckCheck, Sparkles, Lock, ShoppingBag } from 'lucide-react'
+import { Eye, Clock, Check, CheckCheck, Sparkles, Lock, ShoppingBag, Play, Video as VideoIcon, Mic, Pause, Volume2, Activity } from 'lucide-react'
 import type { Message } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LinkPreview } from './link-preview'
 
 interface MessageBubbleProps {
   message: Message
@@ -39,6 +40,9 @@ export function MessageBubble({
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isExpiring, setIsExpiring] = useState(false)
   const [showLightbox, setShowLightbox] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [audioProgress, setAudioProgress] = useState(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const [requestStatus, setRequestStatus] = useState<'pending' | 'accepted' | 'rejected'>(
     message.metadata?.status || 'pending'
@@ -165,6 +169,30 @@ export function MessageBubble({
     }
   }
 
+  const toggleAudio = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!audioRef.current) return
+
+    if (isPlaying) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  const handleAudioTimeUpdate = () => {
+    if (audioRef.current) {
+      const progress = (audioRef.current.currentTime / audioRef.current.duration) * 100
+      setAudioProgress(progress)
+    }
+  }
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false)
+    setAudioProgress(0)
+  }
+
   return (
     <>
       {/* Lightbox */}
@@ -256,6 +284,96 @@ export function MessageBubble({
                   </div>
                 )}
               </div>
+            ) : message.type === 'audio' && message.audioUrl ? (
+              <div className="flex flex-col gap-2 min-w-[200px]">
+                <div
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 relative overflow-hidden",
+                    showBlur && "blur-md select-none"
+                  )}
+                  onClick={showBlur ? handleReveal : undefined}
+                >
+                  <button
+                    onClick={!showBlur ? toggleAudio : undefined}
+                    className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary/30 transition-colors"
+                  >
+                    {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                  </button>
+
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                      <span className="flex items-center gap-1"><Mic className="w-3 h-3" /> Voice Note</span>
+                      {isPlaying && <Activity className="w-3 h-3 text-primary animate-pulse" />}
+                    </div>
+                    <div className="relative h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-primary transition-all duration-100 ease-linear"
+                        style={{ width: `${audioProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <audio
+                    ref={audioRef}
+                    src={message.audioUrl}
+                    onTimeUpdate={handleAudioTimeUpdate}
+                    onEnded={handleAudioEnded}
+                    className="hidden"
+                  />
+                </div>
+                {showBlur && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-[10px] font-black uppercase text-primary/40 tracking-[0.2em] italic animate-pulse">Revelar Áudio</span>
+                  </div>
+                )}
+              </div>
+            ) : message.type === 'video' && message.videoUrl ? (
+              <div className="flex flex-col gap-2">
+                {showLock ? (
+                  <div className="flex flex-col items-center justify-center p-4 gap-2 text-center">
+                    <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-1">
+                      {isBuying ? (
+                        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <VideoIcon className="w-6 h-6 text-amber-500" />
+                      )}
+                    </div>
+                    <p className="font-bold text-amber-500 uppercase italic text-[10px]">Vídeo Protegido</p>
+                    <p className="text-zinc-400 text-sm">
+                      ₮ {price} Tokens
+                    </p>
+                    <div className="mt-2 bg-amber-500 text-white text-[10px] font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm uppercase italic">
+                      <ShoppingBag className="w-3 h-3" />
+                      {isBuying ? 'Liberando...' : 'Liberar Vídeo'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative group rounded-xl overflow-hidden bg-zinc-900 border border-white/5">
+                    <video
+                      src={message.videoUrl}
+                      className={cn(
+                        "max-w-[260px] max-h-[300px] w-full object-cover select-none",
+                        showBlur && "blur-2xl"
+                      )}
+                      autoPlay={!showBlur}
+                      muted
+                      loop
+                      playsInline
+                    />
+                    {!showBlur && (
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-md text-[8px] font-bold text-white uppercase tracking-widest border border-white/10">
+                        HD Video
+                      </div>
+                    )}
+                    {showBlur && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <Play className="w-10 h-10 text-white opacity-40" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {message.content && <p className={cn("text-sm transition-all", showBlur && "blur-md")}>{message.content}</p>}
+              </div>
             ) : message.type === 'image' && message.imageUrl ? (
               (() => {
                 const restricted =
@@ -283,8 +401,11 @@ export function MessageBubble({
                         )}
                       </div>
                       <p className="font-bold text-amber-500">Conteúdo Pago</p>
-                      <p className="text-xs text-muted-foreground opacity-90">
-                        Desbloqueie essa foto por <span className="font-bold text-foreground">{price} Tokens</span>
+                      <p className="text-zinc-400 text-sm">
+                        Desbloqueie essa foto por <br />
+                        <span className="text-2xl font-black text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                          ₮ {price} Tokens
+                        </span>
                       </p>
                       <div className="mt-2 bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm">
                         <ShoppingBag className="w-3 h-3" />
@@ -296,6 +417,7 @@ export function MessageBubble({
 
                 return (
                   <img
+                    key={isRevealed ? 'revealed' : 'hidden'}
                     src={message.imageUrl}
                     alt="Imagem"
                     onClick={handleImageClick}
@@ -309,14 +431,21 @@ export function MessageBubble({
                 )
               })()
             ) : (
-              <p
-                className={cn(
-                  'text-xl leading-relaxed transition-all duration-300',
-                  (showBlur || showLock) && 'blur-lg select-none'
-                )}
-              >
-                {message.content}
-              </p>
+              <div className="space-y-1">
+                <p
+                  className={cn(
+                    'text-base leading-relaxed transition-all duration-300 whitespace-pre-wrap',
+                    (showBlur || showLock) && 'blur-lg select-none'
+                  )}
+                >
+                  {message.content}
+                </p>
+
+                {/* Link Preview if visible */}
+                {!showBlur && !showLock && message.content.match(/(https?:\/\/[^\s]+)/g)?.map((url, i) => (
+                  <LinkPreview key={i} url={url} />
+                ))}
+              </div>
             )}
 
             {showLock && message.type === 'text' && (

@@ -3,10 +3,18 @@
 import React from "react"
 
 import { useState, useRef } from 'react'
-import { X, Plus, Lock, Sparkles, Check, XIcon } from 'lucide-react'
+import { X, Plus, Lock, Sparkles, Check, XIcon, ShoppingBag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface PhotoAlbumProps {
   isOpen: boolean
@@ -24,6 +32,7 @@ export interface AlbumPhoto {
   id: string
   url: string
   isBlurred: boolean
+  price?: number
 }
 
 export interface PhotoRequest {
@@ -49,31 +58,49 @@ export function PhotoAlbum({
   const [activeTab, setActiveTab] = useState<'album' | 'requests'>('album')
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadPrice, setUploadPrice] = useState<string>('0')
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false)
 
   const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && photos.length < 6) {
-      if (onUploadPhoto) {
-        setIsUploading(true)
-        const newPhoto = await onUploadPhoto(file)
-        setIsUploading(false)
-        if (newPhoto) {
-          onUpdatePhotos([...photos, newPhoto])
-        }
-      } else {
-        // Local fallback
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const newPhoto: AlbumPhoto = {
-            id: `photo-${Date.now()}`,
-            url: reader.result as string,
-            isBlurred: true,
-          }
-          onUpdatePhotos([...photos, newPhoto])
-        }
-        reader.readAsDataURL(file)
-      }
+      setSelectedFile(file)
+      setIsPriceModalOpen(true)
     }
+  }
+
+  const handleConfirmUpload = async () => {
+    if (!selectedFile) return
+    const priceValue = parseInt(uploadPrice) || 0
+
+    if (onUploadPhoto) {
+      setIsUploading(true)
+      // @ts-ignore - price added to library
+      const newPhoto = await onUploadPhoto(selectedFile, priceValue)
+      setIsUploading(false)
+      if (newPhoto) {
+        onUpdatePhotos([...photos, newPhoto])
+      }
+    } else {
+      // Local fallback
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const newPhoto: AlbumPhoto = {
+          id: `photo-${Date.now()}`,
+          url: reader.result as string,
+          isBlurred: true,
+          price: priceValue
+        }
+        onUpdatePhotos([...photos, newPhoto])
+      }
+      reader.readAsDataURL(selectedFile)
+    }
+
+    // Reset
+    setSelectedFile(null)
+    setUploadPrice('0')
+    setIsPriceModalOpen(false)
   }
 
   const handleRemovePhoto = async (photoId: string) => {
@@ -153,6 +180,20 @@ export function PhotoAlbum({
                         photo.isBlurred && 'blur-xl'
                       )}
                     />
+
+                    {/* Price Badge */}
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      {photo.price && photo.price > 0 ? (
+                        <div className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-white/20">
+                          {photo.price} ₮
+                        </div>
+                      ) : (
+                        <div className="bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-white/20">
+                          FREE
+                        </div>
+                      )}
+                    </div>
+
                     {photo.isBlurred && (
                       <div className="absolute inset-0 flex items-center justify-center bg-background/20">
                         <div className="flex flex-col items-center gap-1 text-foreground">
@@ -248,6 +289,38 @@ export function PhotoAlbum({
           )}
         </div>
       </div>
+
+      {/* Price Selection Modal */}
+      <Dialog open={isPriceModalOpen} onOpenChange={setIsPriceModalOpen}>
+        <DialogContent className="max-w-[340px] rounded-[30px] border-4 border-primary/20 bg-background p-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black italic uppercase tracking-tighter">Valor da Foto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="uppercase text-[10px] font-black tracking-widest opacity-60">Preço em Tokens</Label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-primary">₮</span>
+                <input
+                  type="number"
+                  value={uploadPrice}
+                  onChange={(e) => setUploadPrice(e.target.value)}
+                  className="w-full bg-secondary border-2 border-primary/10 rounded-2xl py-3 pl-10 pr-4 font-bold text-xl focus:border-primary outline-none transition-all"
+                  placeholder="0"
+                  min="0"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">
+                Deixe 0 para que a foto seja gratuita (usuários precisarão pedir permissão).
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button variant="ghost" onClick={() => setIsPriceModalOpen(false)} className="flex-1 rounded-2xl uppercase font-black italic text-xs">Cancelar</Button>
+            <Button onClick={handleConfirmUpload} className="flex-1 rounded-2xl uppercase font-black italic text-xs">Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

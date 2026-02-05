@@ -8,8 +8,10 @@ export async function sendMessage(message: {
     content: string
     senderId: string
     receiverId: string
-    type?: 'text' | 'image' | 'request'
+    type?: 'text' | 'image' | 'video' | 'audio' | 'request'
     imageUrl?: string
+    videoUrl?: string
+    audioUrl?: string
     allowedNicknames?: string[]
     expiresIn?: number
     metadata?: any
@@ -26,6 +28,8 @@ export async function sendMessage(message: {
             receiver_id: message.receiverId,
             type: message.type || 'text',
             image_url: message.imageUrl,
+            video_url: message.videoUrl,
+            audio_url: message.audioUrl,
             allowed_nicknames: message.allowedNicknames,
             is_revealed: false, // Sempre começa oculta
             is_read: false,
@@ -33,8 +37,8 @@ export async function sendMessage(message: {
             metadata: message.metadata // Novo campo
         }
 
-        const { data, error } = await supabase
-            .from('messages')
+        const { data, error } = await (supabase
+            .from('messages') as any)
             .insert(messageData)
             .select()
             .single()
@@ -55,6 +59,8 @@ export async function sendMessage(message: {
             isRevealed: data.is_revealed,
             type: data.type,
             imageUrl: data.image_url,
+            videoUrl: data.video_url,
+            audioUrl: data.audio_url,
             allowedNicknames: data.allowed_nicknames,
             expiresIn: data.expires_in,
             metadata: data.metadata,
@@ -85,12 +91,14 @@ export async function loadMessages(
 
         const now = new Date().toISOString()
 
-        const { data, error } = await supabase
-            .from('messages')
+        const { data, error } = await (supabase
+            .from('messages') as any)
             .select('*')
             // Mensagens onde (sender=EU ou receiver=EU) E (sender=OUTRO ou receiver=OUTRO)
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
             .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
+            // Filtro de segurança: não trazer o que já expirou no servidor
+            .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
             .order('created_at', { ascending: false })
             .limit(50) // LIMITAR para não dar Timeout
 
@@ -99,16 +107,17 @@ export async function loadMessages(
             return { data: null, error: error.message }
         }
 
-        // Converter para formato do app e filtrar expiradas
-        const filteredData = data.filter(msg => {
+        // Converter para formato do app e filtrar expiradas com margem de segurança
+        const filteredData = (data as any[]).filter((msg: any) => {
             // Se já tem data de expiração definida, verifica se já passou
             if (msg.expires_at) {
-                return new Date(msg.expires_at).getTime() > Date.now()
+                // Adicionamos uma margem de 1s para evitar flicker
+                return new Date(msg.expires_at).getTime() > Date.now() - 1000
             }
             return true
         })
 
-        const messages: Message[] = filteredData.map((msg) => ({
+        const messages: Message[] = filteredData.map((msg: any) => ({
             id: msg.id,
             content: msg.content,
             senderId: msg.sender_id,
@@ -118,11 +127,13 @@ export async function loadMessages(
             isRevealed: msg.is_revealed,
             type: msg.type,
             imageUrl: msg.image_url,
+            videoUrl: msg.video_url,
+            audioUrl: msg.audio_url,
             allowedNicknames: msg.allowed_nicknames,
             expiresIn: msg.expires_in,
             expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
             metadata: msg.metadata,
-        }))
+        })) as Message[]
 
         return { data: messages, error: null }
     } catch (error) {
@@ -142,16 +153,15 @@ export async function revealMessage(messageId: string): Promise<{ error: string 
         }
 
         // 1. Get current message to know expiresIn
-        const { data: msg, error: fetchError } = await supabase
-            .from('messages')
-            .select('expires_in')
+        const { data, error } = await (supabase
+            .from('messages') as any)
+            .select('*')
             .eq('id', messageId)
             .single()
 
-        if (fetchError) throw fetchError
+        if (error || !data) return { error: error?.message || 'Não encontrado' }
 
-        // Se expires_in for 0, significa que não expira (ex: foto paga)
-        const expiresInSeconds = msg.expires_in
+        const expiresInSeconds = data.expires_in
         let updateData: any = {
             is_revealed: true,
             is_read: true
@@ -165,14 +175,14 @@ export async function revealMessage(messageId: string): Promise<{ error: string 
             updateData.expires_at = null
         }
 
-        const { error } = await supabase
-            .from('messages')
+        const { error: updateError } = await (supabase
+            .from('messages') as any)
             .update(updateData)
             .eq('id', messageId)
 
-        if (error) {
-            console.error('Erro ao revelar mensagem:', error)
-            return { error: error.message }
+        if (updateError) {
+            console.error('Erro ao revelar mensagem:', updateError)
+            return { error: updateError.message }
         }
 
         return { error: null }
@@ -192,8 +202,8 @@ export async function deleteMessage(messageId: string): Promise<{ error: string 
             return { error: 'Supabase não configurado' }
         }
 
-        const { error } = await supabase
-            .from('messages')
+        const { error } = await (supabase
+            .from('messages') as any)
             .delete()
             .eq('id', messageId)
 
@@ -219,8 +229,8 @@ export async function markMessagesAsRead(
             return { error: 'Supabase não configurado' }
         }
 
-        const { error } = await supabase
-            .from('messages')
+        const { error } = await (supabase
+            .from('messages') as any)
             .update({ is_read: true })
             .eq('sender_id', otherUserId)
             .eq('receiver_id', userId)
@@ -248,8 +258,8 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             return { data: null, error: 'Supabase não configurado' }
         }
 
-        const { data: messages, error } = await supabase
-            .from('messages')
+        const { data: messages, error } = await (supabase
+            .from('messages') as any)
             .select(`
                 *,
                 sender:sender_id(id, name, nickname, profile_photo, avatar, is_online),
@@ -268,14 +278,14 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
         const conversationsMap = new Map<string, any>()
 
         // Filtrar mensagens expiradas antes de processar conversas
-        const activeMessages = messages.filter(msg => {
+        const activeMessages = (messages as any[]).filter((msg: any) => {
             if (msg.expires_at) {
                 return new Date(msg.expires_at).getTime() > Date.now()
             }
             return true
         })
 
-        activeMessages.forEach((msg) => {
+        activeMessages.forEach((msg: any) => {
             // Garante que pegamos o objeto correto, tratando se o Supabase retornar como array
             const senderData = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender
             const receiverData = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver
@@ -321,13 +331,13 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
                     id: `conv-${otherUserId}`,
                     user: userObj,
                     lastMessage: messageObj,
-                    unreadCount: (!isOwn && !msg.is_read) ? 1 : 0,
+                    unreadCount: (!isOwn && !(msg as any).is_read) ? 1 : 0,
                     isGroup: false
                 })
             } else {
                 // Conversa já existe, apenas incrementar contador se for mensagem não lida
                 const conv = conversationsMap.get(otherUserId)
-                if (!isOwn && !msg.is_read) {
+                if (!isOwn && !(msg as any).is_read) {
                     conv.unreadCount += 1
                 }
             }

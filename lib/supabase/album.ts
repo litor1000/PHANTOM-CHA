@@ -5,12 +5,13 @@ export interface AlbumPhoto {
     id: string
     url: string
     isBlurred: boolean
+    price?: number
 }
 
 /**
  * Uploads a photo to the user's album
  */
-export async function uploadAlbumPhoto(userId: string, file: File): Promise<{ data: AlbumPhoto | null; error: string | null }> {
+export async function uploadAlbumPhoto(userId: string, file: File, price: number = 0): Promise<{ data: AlbumPhoto | null; error: string | null }> {
     try {
         const supabase = getSupabaseClient()
         if (!supabase) return { data: null, error: 'Supabase não configurado' }
@@ -34,7 +35,8 @@ export async function uploadAlbumPhoto(userId: string, file: File): Promise<{ da
             .from('user_albums')
             .insert({
                 user_id: userId,
-                url: publicUrl
+                url: publicUrl,
+                price: price
             })
             .select()
             .single()
@@ -84,7 +86,8 @@ export async function getUserAlbum(userId: string): Promise<{ data: AlbumPhoto[]
             return {
                 id: item.id,
                 url: item.url,
-                isBlurred: !hasAccess // Blur if no access
+                isBlurred: !hasAccess, // Blur if no access
+                price: item.price || 0
             }
         })
 

@@ -41,8 +41,10 @@ export interface Message {
   isRevealed: boolean
   expiresAt?: Date
   expiresIn?: number
-  type: 'text' | 'image' | 'request'
+  type: 'text' | 'image' | 'video' | 'audio' | 'request'
   imageUrl?: string
+  videoUrl?: string
+  audioUrl?: string
   allowedNicknames?: string[]
   metadata?: {
     photoId?: string

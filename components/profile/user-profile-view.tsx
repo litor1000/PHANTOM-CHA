@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Lock, Sparkles, MessageCircle, Star, ShieldCheck, Zap, History, ChevronLeft, Layout } from 'lucide-react'
+import { X, Lock, Sparkles, MessageCircle, Star, ShieldCheck, Zap, History, ChevronLeft, Layout, ShoppingBag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -14,12 +14,14 @@ interface UserProfileViewProps {
   user: User
   onSendMessage: () => void
   onRequestPhoto: (photoId: string) => void
+  onPurchasePhoto: (photoId: string, price: number) => Promise<boolean>
 }
 
 interface UserAlbumPhoto {
   id: string
   url: string
   hasAccess: boolean
+  price?: number
 }
 
 export function UserProfileView({
@@ -28,6 +30,7 @@ export function UserProfileView({
   user,
   onSendMessage,
   onRequestPhoto,
+  onPurchasePhoto,
 }: UserProfileViewProps) {
   const [albumPhotos, setAlbumPhotos] = useState<UserAlbumPhoto[]>([])
   const [stats, setStats] = useState<any>(null)
@@ -54,7 +57,8 @@ export function UserProfileView({
         setAlbumPhotos(albumData.map(p => ({
           id: p.id,
           url: p.url,
-          hasAccess: !p.isBlurred
+          hasAccess: !p.isBlurred,
+          price: p.price
         })))
       }
 
@@ -69,6 +73,14 @@ export function UserProfileView({
   const handleRequestPhoto = (photoId: string) => {
     setRequestedPhotos((prev) => new Set([...prev, photoId]))
     onRequestPhoto(photoId)
+  }
+
+  const handleBuyPhoto = async (photoId: string, price: number) => {
+    const success = await onPurchasePhoto(photoId, price)
+    if (success) {
+      // Reload or update local hasAccess
+      setAlbumPhotos(prev => prev.map(p => p.id === photoId ? { ...p, hasAccess: true } : p))
+    }
   }
 
   const getStarRating = (earned: number) => {
@@ -219,7 +231,11 @@ export function UserProfileView({
                           onClick={(e) => {
                             e.stopPropagation()
                             if (!photo.hasAccess) {
-                              if (!requestedPhotos.has(photo.id)) handleRequestPhoto(photo.id);
+                              if (photo.price && photo.price > 0) {
+                                handleBuyPhoto(photo.id, photo.price)
+                              } else {
+                                if (!requestedPhotos.has(photo.id)) handleRequestPhoto(photo.id);
+                              }
                             } else {
                               setSelectedPhoto(photo);
                             }
@@ -237,12 +253,19 @@ export function UserProfileView({
                           />
                           {!photo.hasAccess && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 group">
-                              {requestedPhotos.has(photo.id) ? (
+                              {photo.price && photo.price > 0 ? (
+                                <div className="flex flex-col items-center gap-1 text-amber-500 scale-90 group-hover:scale-100 transition-transform">
+                                  <ShoppingBag className="w-6 h-6" />
+                                  <span className="text-[10px] font-black uppercase">{photo.price} ₮</span>
+                                  <div className="bg-amber-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full mt-1">COMPRAR</div>
+                                </div>
+                              ) : requestedPhotos.has(photo.id) ? (
                                 <Badge variant="secondary" className="text-[9px] font-bold">SOLICITADO</Badge>
                               ) : (
                                 <div className="flex flex-col items-center gap-1 text-white scale-90 group-hover:scale-100 transition-transform">
                                   <Sparkles className="w-5 h-5" />
                                   <span className="text-[8px] font-black uppercase tracking-tighter">Desbloquear</span>
+                                  <div className="bg-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-full mt-1 border border-white/30 tracking-tight">GRÁTIS</div>
                                 </div>
                               )}
                             </div>

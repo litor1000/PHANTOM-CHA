@@ -25,3 +25,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mobile/firebase secrets
+android/google-services.json
+ios/App/App/google-services.plist
+android/phantomchat-*.json
+*.keystore
+*.jks

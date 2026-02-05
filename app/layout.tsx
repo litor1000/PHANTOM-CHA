@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { NativeInit } from '@/components/native-init'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -41,6 +42,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className="font-sans antialiased overflow-hidden bg-background min-h-dvh">
+        <NativeInit />
         <div className="w-full min-h-dvh flex items-center justify-center bg-muted/30">
           {children}
         </div>

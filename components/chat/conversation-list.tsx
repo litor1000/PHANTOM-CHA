@@ -37,9 +37,18 @@ interface ConversationListProps {
   onAcceptInvite?: (groupId: string) => void
   onRejectInvite?: (groupId: string) => void
   onDeleteConversation?: (conversationId: string) => void
+  typingUserIds?: string[]
 }
 
 type TabType = 'chats' | 'contacts' | 'groups'
+
+function getInitials(name: string): string {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
 
 export function ConversationList({
   conversations,
@@ -53,6 +62,7 @@ export function ConversationList({
   onAcceptInvite,
   onRejectInvite,
   onDeleteConversation,
+  typingUserIds = [],
 }: ConversationListProps) {
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
@@ -265,22 +275,23 @@ export function ConversationList({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-secondary/50 p-1 rounded-lg">
+        <div className="flex gap-1 bg-secondary/50 p-1 rounded-xl">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'relative flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-all',
+                'relative flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-sm font-semibold transition-all active:scale-95 touch-manipulation z-10',
                 activeTab === tab.id
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
               )}
             >
-              <tab.icon className="w-3.5 h-3.5" />
+              <tab.icon className="w-4 h-4" />
               <span>{tab.label}</span>
               {tab.id === 'chats' && conversations.some(c => c.unreadCount > 0) && (
-                <span className="absolute top-1 right-2 min-w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
+                <span className="absolute top-2 right-2 min-w-[8px] h-[8px] rounded-full bg-red-500 border border-secondary shadow-sm animate-pulse" />
               )}
             </button>
           ))}
@@ -302,42 +313,43 @@ export function ConversationList({
       </div>
 
       {/* Content based on active tab */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 flex flex-col">
         {activeTab === 'chats' && (
-          <>
+          <div className="flex-1 overflow-y-auto scrollbar-hide">
             {filteredConversations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4">
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-20">
                 <Ghost className="h-12 w-12 mb-3 opacity-50" />
                 <p className="text-center">
                   {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-border/50">
+              <div className="divide-y divide-border/50 pb-20">
                 {filteredConversations.map((conversation) => (
                   <ConversationItem
                     key={conversation.id}
                     conversation={conversation}
                     onClick={() => onSelectConversation(conversation.user.id)}
                     onDelete={onDeleteConversation}
+                    isTyping={typingUserIds.includes(conversation.user.id)}
                   />
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
         {activeTab === 'contacts' && (
-          <div className="flex flex-col h-full">
-            <div className="p-3 border-b border-border">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 py-2 border-b border-border/50">
               <form onSubmit={handleSearchUser} className="flex gap-2">
                 <Input
                   placeholder="Buscar @nickname"
                   value={newContactNickname}
                   onChange={(e) => setNewContactNickname(e.target.value)}
-                  className="bg-secondary border-0"
+                  className="bg-secondary border-0 h-10"
                 />
-                <Button type="submit" size="icon" disabled={!newContactNickname.trim() || isSearching}>
+                <Button type="submit" size="icon" className="h-10 w-10 shrink-0" disabled={!newContactNickname.trim() || isSearching}>
                   {isSearching ? (
                     <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   ) : (
@@ -347,68 +359,59 @@ export function ConversationList({
               </form>
             </div>
 
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <div className="p-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">RESULTADO DA BUSCA</h3>
-                {searchResults.map((user) => (
-                  <div key={user.id} className="flex items-center gap-3 p-3 bg-card rounded-md border border-border">
-                    <div className="relative shrink-0">
-                      <Avatar className="w-10 h-10 border border-border">
+            <div className="flex-1 overflow-y-auto scrollbar-hide">
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <div className="p-3 bg-secondary/30 border-b border-border">
+                  <h3 className="text-[10px] font-bold text-muted-foreground mb-2 px-1 uppercase tracking-widest">Resultado da Busca</h3>
+                  {searchResults.map((user) => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border mb-2 shadow-sm">
+                      <Avatar className="w-10 h-10 border border-border/10">
                         <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
-                        <AvatarFallback className="bg-primary/20 text-primary text-xs font-medium">
-                          {user.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
+                        <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                       </Avatar>
-                      {user.isOnline && (
-                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate">{user.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">@{user.nickname}</p>
+                      </div>
+                      <Button size="sm" onClick={() => handleAddContact(user)} className="h-8">
+                        Adicionar
+                      </Button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-foreground truncate">{user.name}</h3>
-                      <p className="text-xs text-muted-foreground truncate">@{user.nickname}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleAddContact(user)}
-                      className="bg-primary hover:bg-primary/90"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Adicionar
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            <div className="flex-1 overflow-y-auto">
               {filteredContacts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-8">
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-20">
                   <Users className="h-12 w-12 mb-3 opacity-50" />
-                  <p className="text-center font-medium mb-1">Seus contatos</p>
-                  <p className="text-center text-sm">Adicione amigos pelo nickname</p>
+                  <p className="text-center font-bold">Seus Contatos</p>
+                  <p className="text-center text-xs opacity-60">Adicione amigos pelo nickname</p>
                 </div>
               ) : (
-                <div className="divide-y divide-border/50">
+                <div className="divide-y divide-border/30 pb-20">
                   {filteredContacts.map((contact) => (
-                    <div key={contact.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors">
+                    <div
+                      key={contact.id}
+                      className="flex items-center gap-3 p-4 hover:bg-secondary/30 transition-colors active:bg-secondary/50 cursor-pointer"
+                      role="button"
+                      onClick={() => onSelectConversation(contact.id)}
+                    >
                       <div className="relative shrink-0">
-                        <Avatar className="w-10 h-10 border border-border">
+                        <Avatar className="w-12 h-12 border border-border/10">
                           <AvatarImage src={contact.avatar || "/placeholder.svg"} alt={contact.name} />
-                          <AvatarFallback className="bg-primary/20 text-primary text-xs font-medium">
-                            {contact.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                          <AvatarFallback>{getInitials(contact.name)}</AvatarFallback>
                         </Avatar>
                         {contact.isOnline && (
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-foreground truncate">{contact.name}</h3>
+                        <h3 className="text-sm font-bold text-foreground truncate">{contact.name}</h3>
                         <p className="text-xs text-muted-foreground truncate">@{contact.nickname}</p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => onSelectConversation(contact.id)}>
-                        <MessageCircle className="w-4 h-4 text-muted-foreground" />
+                      <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground">
+                        <MessageCircle className="w-5 h-5" />
                       </Button>
                     </div>
                   ))}
@@ -419,16 +422,16 @@ export function ConversationList({
         )}
 
         {activeTab === 'groups' && (
-          <div className="flex flex-col h-full">
-            <div className="p-3 border-b border-border">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-4 border-b border-border/50">
               <Dialog open={isCreateGroupOpen} onOpenChange={setIsCreateGroupOpen}>
                 <DialogTrigger asChild>
-                  <Button className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-0">
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20 border h-11">
+                    <Plus className="w-5 h-5 mr-2" />
                     Criar Novo Grupo
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-[90vw] rounded-2xl">
                   <DialogHeader>
                     <DialogTitle>Criar Grupo</DialogTitle>
                   </DialogHeader>
@@ -439,25 +442,33 @@ export function ConversationList({
                         value={groupName}
                         onChange={e => setGroupName(e.target.value)}
                         placeholder="Ex: Amigos da Faculdade"
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Selecionar Membros ({selectedMembers.length})</Label>
-                      <div className="max-h-48 overflow-y-auto border rounded-md p-1">
+                      <div className="max-h-60 overflow-y-auto border border-border/50 rounded-xl p-2 space-y-1 bg-secondary/20">
                         {contacts.length === 0 ? (
-                          <p className="p-2 text-sm text-muted-foreground">Adicione contatos primeiro.</p>
+                          <p className="p-4 text-sm text-center text-muted-foreground">Adicione contatos primeiro.</p>
                         ) : (
                           contacts.map(contact => (
                             <div
                               key={contact.id}
-                              className="flex items-center gap-2 p-2 hover:bg-secondary rounded cursor-pointer"
+                              className="flex items-center gap-3 p-3 hover:bg-secondary rounded-lg cursor-pointer transition-colors active:bg-secondary"
                               onClick={() => toggleMemberSelection(contact.id)}
                             >
                               <Checkbox
+                                id={`member-${contact.id}`}
                                 checked={selectedMembers.includes(contact.id)}
                                 onCheckedChange={() => toggleMemberSelection(contact.id)}
                               />
-                              <span className="text-sm">{contact.name}</span>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-8 w-8 border">
+                                  <AvatarImage src={contact.avatar || "/placeholder.svg"} />
+                                  <AvatarFallback className="text-[10px]">{getInitials(contact.name)}</AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm font-medium">{contact.name}</span>
+                              </div>
                             </div>
                           ))
                         )}
@@ -465,63 +476,64 @@ export function ConversationList({
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button onClick={handleCreateGroupSubmit} disabled={!groupName.trim()}>Criar Grupo</Button>
+                    <Button onClick={handleCreateGroupSubmit} disabled={!groupName.trim()} className="w-full h-11">Criar Grupo</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
 
-            {/* Invites Section */}
-            {groupInvitesList.length > 0 && (
-              <div className="p-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-1">CONVITES PENDENTES</h3>
-                {groupInvitesList.map(group => (
-                  <div key={group.id} className="flex items-center justify-between p-2 bg-card rounded-md border border-border mb-2">
-                    <div className="text-sm">
-                      <span className="font-bold">{group.user.name}</span>
-                      <p className="text-xs text-muted-foreground">Você foi convidado para participar</p>
+            <div className="flex-1 overflow-y-auto scrollbar-hide">
+              {/* Invites Section */}
+              {groupInvitesList.length > 0 && (
+                <div className="p-3 bg-primary/5 border-b border-primary/10">
+                  <h3 className="text-[10px] font-black text-primary mb-2 px-1 uppercase tracking-widest">Convites Pendentes</h3>
+                  {groupInvitesList.map(group => (
+                    <div key={group.id} className="flex items-center justify-between p-3 bg-background rounded-xl border border-primary/20 mb-2 shadow-sm">
+                      <div className="text-sm min-w-0">
+                        <span className="font-bold truncate block">{group.user.name}</span>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold opacity-70">Convite de grupo</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="icon"
+                          className="h-9 w-9 bg-green-500 text-white hover:bg-green-600 rounded-full"
+                          onClick={() => onAcceptInvite?.(group.id)}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-red-500 hover:bg-red-500/10 rounded-full"
+                          onClick={() => onRejectInvite?.(group.id)}
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                        onClick={() => onAcceptInvite?.(group.id)}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                        onClick={() => onRejectInvite?.(group.id)}
-                      >
-                        <XIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto">
-              {joinedGroupsList.length === 0 && groupInvitesList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-8">
-                  <Users className="h-12 w-12 mb-3 opacity-50" />
-                  <p className="text-center font-medium mb-1">Seus Grupos</p>
-                  <p className="text-center text-sm">Crie grupos para conversar com várias pessoas</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border/50">
-                  {joinedGroupsList.map((conversation) => (
-                    <ConversationItem
-                      key={conversation.id}
-                      conversation={conversation}
-                      onClick={() => onSelectConversation(conversation.user.id)}
-                    />
                   ))}
                 </div>
               )}
+
+              <div className="flex-1">
+                {joinedGroupsList.length === 0 && groupInvitesList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4 py-20">
+                    <Users className="h-16 w-16 mb-4 opacity-30" />
+                    <p className="text-center font-bold">Seus Grupos</p>
+                    <p className="text-center text-xs opacity-60">Crie grupos para conversar com várias pessoas</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/30 pb-20">
+                    {joinedGroupsList.map((conversation) => (
+                      <ConversationItem
+                        key={conversation.id}
+                        conversation={conversation}
+                        onClick={() => onSelectConversation(conversation.user.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

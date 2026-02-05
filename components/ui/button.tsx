@@ -41,6 +41,7 @@ function Button({
   variant,
   size,
   asChild = false,
+  onClick,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
@@ -48,10 +49,19 @@ function Button({
   }) {
   const Comp = asChild ? Slot : 'button'
 
+  const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const { triggerImpact } = await import('@/lib/haptics')
+    const { playSystemSound } = await import('@/lib/sounds')
+    triggerImpact()
+    playSystemSound('click')
+    if (onClick) onClick(e)
+  }
+
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      onClick={handleClick}
       {...props}
     />
   )

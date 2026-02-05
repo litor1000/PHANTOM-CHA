@@ -10,13 +10,20 @@ import type { UserFormData } from '@/components/onboarding/auth-form-refactored'
 import { getCurrentUser, updateUserProfile, searchUserByNickname } from '@/lib/supabase/auth'
 import { uploadProfilePhoto, uploadCoverPhoto } from '@/lib/supabase/storage'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
+import { setupPresence } from '@/lib/supabase/presence'
+import { AnimatePresence, motion } from 'framer-motion'
+import { BiometricLock } from '@/components/auth/biometric-lock'
+import { Capacitor } from '@capacitor/core'
 
 export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLocked, setIsLocked] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [contacts, setContacts] = useState<User[]>([])
+  const [onlineUserIds, setOnlineUserIds] = useState<string[]>([])
+  const [activeChat, setActiveChat] = useState<string | null>(null)
 
   const selectedUser = mockUsers.find((u) => u.id === selectedUserId) ||
     conversations.find(c => c.user.id === selectedUserId)?.user ||
@@ -31,6 +38,7 @@ export default function Home() {
 
       if (supabaseUser) {
         setUser(supabaseUser)
+        if (Capacitor.isNativePlatform()) setIsLocked(true)
         // Load user-specific contacts
         const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
         if (savedContacts) {
@@ -45,6 +53,7 @@ export default function Home() {
           try {
             const parsedUser = JSON.parse(savedUser)
             setUser(parsedUser)
+            if (Capacitor.isNativePlatform()) setIsLocked(true)
             // Load user-specific contacts
             const savedContacts = localStorage.getItem(`phantom-contacts-${parsedUser.id}`)
             if (savedContacts) {
@@ -455,18 +464,6 @@ export default function Home() {
     })
   }
 
-  if (isLoading) {
-    return (
-      <main className="h-dvh w-full flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </main>
-    )
-  }
-
-  if (!user) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} />
-  }
-
   // Delete conversation logic
   const handleDeleteConversation = (conversationId: string) => {
     setConversations(prev => {
@@ -477,10 +474,6 @@ export default function Home() {
 
     // If deleted active conversation, deselect
     if (selectedUserId) {
-      // If the conversation ID matches the selected user ID (often used as key) or 
-      // if we can find the user ID from the conversation ID
-      // Note: In our app, conversationId is often `conv-{userId}` or we find conversation by user ID.
-      // Let's check if the deleted conversation corresponds to the open chat.
       const deletedConv = conversations.find(c => c.id === conversationId)
       if (deletedConv && deletedConv.user.id === selectedUserId) {
         setSelectedUserId(null)
@@ -488,7 +481,52 @@ export default function Home() {
     }
   }
 
+  const [typingToMe, setTypingToMe] = useState<string[]>([]) // IDs de quem está digitando para MIM
 
+  // Presence Setup
+  useEffect(() => {
+    if (!user?.id || user.id === 'current-user') return
+
+    const channel = setupPresence(user.id, (state) => {
+      // 1. Atualizar IDs Online
+      const onlineIds = Object.keys(state).filter(id => id !== user.id)
+      setOnlineUserIds(onlineIds)
+
+      // 2. Identificar quem está digitando para MIM
+      const typingIds: string[] = []
+      Object.entries(state).forEach(([id, presences]: [string, any]) => {
+        if (id === user.id) return
+        const isTypingToMe = presences.some((p: any) => p.isTypingTo === user.id)
+        if (isTypingToMe) {
+          typingIds.push(id)
+        }
+      })
+      setTypingToMe(typingIds)
+    })
+
+    return () => {
+      if (channel) channel.unsubscribe()
+    }
+  }, [user?.id])
+
+  // Update conversations and contacts online status
+  const conversationsWithPresence = conversations.map(conv => ({
+    ...conv,
+    user: {
+      ...conv.user,
+      isOnline: onlineUserIds.includes(conv.user.id)
+    }
+  }))
+
+  const contactsWithPresence = contacts.map(contact => ({
+    ...contact,
+    isOnline: onlineUserIds.includes(contact.id)
+  }))
+
+  const currentUserWithPresence = user ? {
+    ...user,
+    isOnline: true // Current user is obviously online
+  } : null
 
   // Update handleAddContact to use Supabase
   const handleAddContact = async (nickname: string) => {
@@ -505,10 +543,10 @@ export default function Home() {
     return false
   }
 
-  const handleSelectConversation = (userId: string) => {
+  const handleChatSelect = (userId: string) => {
     setSelectedUserId(userId)
-
-    // Limpar contador de não lidas localmente para feedback imediato
+    setActiveChat(userId) // Set active chat for presence
+    // Clear unread count locally for immediate feedback
     setConversations(prev => prev.map(conv => {
       if (conv.user.id === userId) {
         return { ...conv, unreadCount: 0 }
@@ -517,29 +555,65 @@ export default function Home() {
     }))
   }
 
+  if (isLoading) {
+    return (
+      <main className="h-dvh w-full flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </main>
+    )
+  }
+
+  if (isLocked) {
+    return <BiometricLock onAuthenticated={() => setIsLocked(false)} />
+  }
+
+  if (!user) {
+    return <OnboardingFlow onComplete={handleOnboardingComplete} />
+  }
+
   return (
-    <main className="h-dvh w-full max-w-md mx-auto flex flex-col bg-background overflow-hidden shadow-2xl">
-      {selectedUserId && selectedUser ? (
-        <ChatView
-          user={selectedUser}
-          onBack={() => setSelectedUserId(null)}
-          onMessageSent={handleMessageSent}
-        />
-      ) : (
-        <ConversationList
-          conversations={conversations}
-          onSelectConversation={handleSelectConversation}
-          currentUser={user}
-          onUpdateUser={handleUpdateUser}
-          onLogout={handleLogout}
-          contacts={contacts}
-          onAddContact={handleAddContact}
-          onCreateGroup={handleCreateGroup}
-          onAcceptInvite={handleAcceptInvite}
-          onRejectInvite={handleRejectInvite}
-          onDeleteConversation={handleDeleteConversation}
-        />
-      )}
+    <main className="h-dvh w-full max-w-md mx-auto flex flex-col bg-background overflow-hidden shadow-2xl relative">
+      <AnimatePresence>
+        {selectedUserId && selectedUser ? (
+          <motion.div
+            key="chat-view"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+            className="absolute inset-0 z-50 bg-background"
+          >
+            <ChatView
+              user={selectedUser}
+              onBack={() => setSelectedUserId(null)}
+              onMessageSent={handleMessageSent}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="conversation-list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="h-full w-full"
+          >
+            <ConversationList
+              conversations={conversationsWithPresence}
+              onSelectConversation={handleChatSelect}
+              currentUser={currentUserWithPresence as CurrentUser}
+              onUpdateUser={setUser}
+              onLogout={handleLogout}
+              contacts={contactsWithPresence}
+              onAddContact={handleAddContact}
+              onCreateGroup={handleCreateGroup}
+              onAcceptInvite={handleAcceptInvite}
+              onRejectInvite={handleRejectInvite}
+              onDeleteConversation={handleDeleteConversation}
+              typingUserIds={typingToMe}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <InstallPrompt />
     </main>
   )
