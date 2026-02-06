@@ -127,7 +127,7 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
       {/* Background Image */}
       <div className="absolute inset-0">
         <Image
-          src="/images/onboarding-bg.jpg"
+          src="/images/onboarding-bg.png"
           alt=""
           fill
           className="object-cover"

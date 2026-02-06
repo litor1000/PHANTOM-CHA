@@ -9,9 +9,6 @@ import { ConversationItem } from './conversation-item'
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { SettingsSheet } from '@/components/settings/settings-sheet'
-import { PhotoAlbum, type AlbumPhoto, type PhotoRequest } from '@/components/profile/photo-album'
-import { WalletView } from '@/components/wallet/wallet-view'
 import {
   Dialog,
   DialogContent,
@@ -22,7 +19,6 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-
 import { useToast } from "@/components/ui/use-toast"
 
 interface ConversationListProps {
@@ -38,6 +34,8 @@ interface ConversationListProps {
   onRejectInvite?: (groupId: string) => void
   onDeleteConversation?: (conversationId: string) => void
   typingUserIds?: string[]
+  onOpenSettings: () => void
+  onOpenWallet: () => void
 }
 
 type TabType = 'chats' | 'contacts' | 'groups'
@@ -63,50 +61,13 @@ export function ConversationList({
   onRejectInvite,
   onDeleteConversation,
   typingUserIds = [],
+  onOpenSettings,
+  onOpenWallet,
 }: ConversationListProps) {
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<TabType>('chats')
 
-  const [showSettings, setShowSettings] = useState(false)
-  const [showAlbum, setShowAlbum] = useState(false)
-  const [showWallet, setShowWallet] = useState(false)
-  const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
-
-  // Load album when opening
-  useEffect(() => {
-    if (showAlbum && currentUser.id && currentUser.id !== 'current-user') {
-      const loadAlbum = async () => {
-        const { getUserAlbum } = await import('@/lib/supabase/album')
-        const { data } = await getUserAlbum(currentUser.id)
-        if (data) setAlbumPhotos(data)
-      }
-      loadAlbum()
-    }
-  }, [showAlbum, currentUser.id])
-
-  const handleUpdateAlbum = async (newPhotos: AlbumPhoto[]) => {
-    // Logic to determine add vs remove
-    // Ideally PhotoAlbum should emit separate events for add/remove, 
-    // but sticking to existing prop text for now.
-
-    // If length increased, it's an add (only if local component added optimistic).
-    // But PhotoAlbum's onUpdatePhotos is just a setter for local state usually.
-    // We need to change how PhotoAlbum works or intercept the change.
-
-    // Actually, looking at PhotoAlbum component code:
-    // It calls onUpdatePhotos([...photos, newPhoto]) for add
-    // It calls onUpdatePhotos(photos.filter(...)) for remove
-
-    // Since we want DB persistence, we should probably change PhotoAlbum props 
-    // OR handle the diff here (complex).
-    // BETTER: Update PhotoAlbum component to accept async handlers? 
-    // For now, let's keep it simple here by updating state, 
-    // but actually we need PhotoAlbum to call a real "onAdd" function.
-    // Wait, I can't change PhotoAlbum prop interface easily without changing the file.
-    // Let's modify PhotoAlbum component first to support upload/delete callbacks.
-    setAlbumPhotos(newPhotos)
-  }
   const [newContactNickname, setNewContactNickname] = useState('')
   const [searchResults, setSearchResults] = useState<UserType[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -116,10 +77,6 @@ export function ConversationList({
   const [groupName, setGroupName] = useState('')
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
 
-  // Invites state (mock)
-  const [groupInvites, setGroupInvites] = useState<{ id: string, groupName: string, inviter: string }[]>([])
-  const [photoRequests, setPhotoRequests] = useState<PhotoRequest[]>([])
-
   const filteredConversations = conversations.filter((conv) => {
     const matchesSearch = conv.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.user.nickname.toLowerCase().includes(searchQuery.toLowerCase())
@@ -127,15 +84,13 @@ export function ConversationList({
     if (activeTab === 'chats') return !conv.isGroup && matchesSearch
     if (activeTab === 'groups') {
       if (!conv.isGroup) return false
-      // Show if user is member OR pending member
-      const isMember = conv.members?.includes(currentUser.id) || !conv.members // fallback for mocks
+      const isMember = conv.members?.includes(currentUser.id) || !conv.members
       const isPending = conv.pendingMembers?.includes(currentUser.id)
       return (isMember || isPending) && matchesSearch
     }
     return false
   })
 
-  // Separate invites from joined groups
   const groupInvitesList = activeTab === 'groups'
     ? filteredConversations.filter(c => c.pendingMembers?.includes(currentUser.id))
     : []
@@ -156,14 +111,12 @@ export function ConversationList({
     setIsSearching(true)
     setSearchResults([])
 
-    // Import searchUserByNickname dynamically
     const { searchUserByNickname } = await import('@/lib/supabase/auth')
     const user = await searchUserByNickname(newContactNickname.trim())
 
     setIsSearching(false)
 
     if (user) {
-      // Check if already in contacts
       const alreadyAdded = contacts.some(c => c.id === user.id)
       if (alreadyAdded) {
         toast({
@@ -186,16 +139,13 @@ export function ConversationList({
 
   const handleAddContact = (user: UserType) => {
     if (onAddContact) {
-      const result = onAddContact(user.nickname)
-      const success = typeof result === 'boolean' ? result : true
-      if (success) {
-        setNewContactNickname('')
-        setSearchResults([])
-        toast({
-          title: "Contato adicionado",
-          description: `O usuário @${user.nickname} foi adicionado aos seus contatos.`,
-        })
-      }
+      onAddContact(user.nickname)
+      setNewContactNickname('')
+      setSearchResults([])
+      toast({
+        title: "Contato adicionado",
+        description: `O usuário @${user.nickname} foi adicionado aos seus contatos.`,
+      })
     }
   }
 
@@ -205,7 +155,6 @@ export function ConversationList({
       setGroupName('')
       setSelectedMembers([])
       setIsCreateGroupOpen(false)
-      // Mock invite for demo purposes if needed
     }
   }
 
@@ -217,20 +166,11 @@ export function ConversationList({
     )
   }
 
-
   const tabs: { id: TabType; label: string; icon: typeof MessageCircle }[] = [
     { id: 'chats', label: 'Chats', icon: MessageCircle },
     { id: 'contacts', label: 'Contatos', icon: Users },
     { id: 'groups', label: 'Grupos', icon: UserPlus },
   ]
-
-  const handleApproveRequest = (requestId: string) => {
-    setPhotoRequests((prev) => prev.filter((r) => r.id !== requestId))
-  }
-
-  const handleRejectRequest = (requestId: string) => {
-    setPhotoRequests((prev) => prev.filter((r) => r.id !== requestId))
-  }
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -266,7 +206,7 @@ export function ConversationList({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowSettings(true)}
+            onClick={onOpenSettings}
             className="text-muted-foreground hover:text-foreground h-9 w-9 shrink-0"
             aria-label="Configuracoes"
           >
@@ -538,58 +478,6 @@ export function ConversationList({
           </div>
         )}
       </div>
-
-      {/* Settings Sheet */}
-      <SettingsSheet
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        user={currentUser}
-        onUpdateUser={onUpdateUser}
-        onLogout={onLogout}
-        onOpenAlbum={() => {
-          setShowSettings(false)
-          setShowAlbum(true)
-        }}
-        onOpenWallet={() => {
-          setShowSettings(false)
-          setShowWallet(true)
-        }}
-      />
-
-      {/* Photo Album */}
-      <PhotoAlbum
-        isOpen={showAlbum}
-        onClose={() => setShowAlbum(false)}
-        photos={albumPhotos}
-        onUpdatePhotos={setAlbumPhotos}
-        pendingRequests={photoRequests}
-        onApproveRequest={handleApproveRequest}
-        onRejectRequest={handleRejectRequest}
-        onUploadPhoto={async (file) => {
-          const { uploadAlbumPhoto } = await import('@/lib/supabase/album')
-          const { data, error } = await uploadAlbumPhoto(currentUser.id, file)
-          if (error) {
-            toast({
-              variant: "destructive",
-              title: "Erro ao enviar foto",
-              description: "Não foi possível enviar sua foto. Tente novamente."
-            })
-            return null
-          }
-          return data
-        }}
-        onDeletePhoto={async (photoId) => {
-          const { deleteAlbumPhoto } = await import('@/lib/supabase/album')
-          await deleteAlbumPhoto(photoId)
-        }}
-      />
-
-      {/* Wallet View */}
-      <WalletView
-        isOpen={showWallet}
-        onClose={() => setShowWallet(false)}
-        currentUser={currentUser}
-      />
     </div>
   )
 }

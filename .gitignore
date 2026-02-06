@@ -26,6 +26,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# IDEs
+.idea/
+*.swp
+*.swo
+
 # mobile/firebase secrets
 android/google-services.json
 ios/App/App/google-services.plist

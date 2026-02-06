@@ -45,8 +45,8 @@ export async function signUp(userData: {
     }
 
     // 3. Criar perfil na tabela users
-    const { error: profileError } = await supabase
-      .from('users')
+    const { error: profileError } = await (supabase
+      .from('users') as any)
       .insert({
         id: authData.user.id,
         email: userData.email,
@@ -150,13 +150,16 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
     if (!user) return null
 
-    const { data: profile } = await supabase
-      .from('users')
+    const { data: profile } = await (supabase
+      .from('users') as any)
       .select('*')
       .eq('id', user.id)
       .single()
 
     if (!profile) return null
+
+    // Map profile to User object with fallback logic
+    const photo = profile.profile_photo || profile.avatar || ''
 
     return {
       id: profile.id,
@@ -164,14 +167,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       nickname: profile.nickname,
       email: profile.email,
       phone: profile.phone,
-      avatar: profile.avatar || '',
-      profilePhoto: profile.profile_photo || null,
-      coverPhoto: profile.cover_photo,
+      avatar: photo,
+      profilePhoto: photo,
+      coverPhoto: profile.cover_photo || '',
       isOnline: profile.is_online,
-      wallet_balance: profile.wallet_balance,
+      wallet_balance: profile.wallet_balance || 0,
       pix_key: profile.pix_key,
       pix_key_type: profile.pix_key_type,
       is_blocked: profile.is_blocked,
+      fcm_token: profile.fcm_token,
     }
   } catch (error) {
     console.error('Erro ao buscar usuário:', error)
@@ -190,18 +194,25 @@ export async function updateUserProfile(userId: string, updates: Partial<Current
     if (updates.name) updateData.name = updates.name
     if (updates.nickname) updateData.nickname = updates.nickname
     if (updates.phone !== undefined) updateData.phone = updates.phone
-    if (updates.avatar !== undefined) updateData.avatar = updates.avatar
-    if (updates.profilePhoto !== undefined) updateData.profile_photo = updates.profilePhoto
+
+    // Unify avatar and profile_photo to prevent sync issues
+    if (updates.profilePhoto !== undefined || updates.avatar !== undefined) {
+      const photo = updates.profilePhoto || updates.avatar
+      updateData.profile_photo = photo
+      updateData.avatar = photo
+    }
+
     if (updates.coverPhoto !== undefined) updateData.cover_photo = updates.coverPhoto
     if (updates.isOnline !== undefined) updateData.is_online = updates.isOnline
     if (updates.pix_key !== undefined) updateData.pix_key = updates.pix_key
     if (updates.pix_key_type !== undefined) updateData.pix_key_type = updates.pix_key_type
     if (updates.is_blocked !== undefined) updateData.is_blocked = updates.is_blocked
+    if (updates.fcm_token !== undefined) updateData.fcm_token = updates.fcm_token
 
     if (Object.keys(updateData).length === 0) return { error: null }
 
-    const { error } = await supabase
-      .from('users')
+    const { error } = await (supabase
+      .from('users') as any)
       .update(updateData)
       .eq('id', userId)
 
@@ -223,8 +234,8 @@ export async function searchUserByNickname(nickname: string): Promise<User | nul
     if (!supabase) {
       return null
     }
-    const { data, error } = await supabase
-      .from('users')
+    const { data, error } = await (supabase
+      .from('users') as any)
       .select('*')
       .eq('nickname', nickname.toLowerCase())
       .single()
@@ -245,6 +256,7 @@ export async function searchUserByNickname(nickname: string): Promise<User | nul
       pix_key: data.pix_key,
       pix_key_type: data.pix_key_type,
       is_blocked: data.is_blocked,
+      fcm_token: data.fcm_token,
     }
   } catch (error) {
     console.error('Erro ao buscar usuário:', error)

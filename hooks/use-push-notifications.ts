@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { updateUserProfile } from '@/lib/supabase/auth';
 
-export const usePushNotifications = () => {
+export const usePushNotifications = (userId: string | undefined) => {
     useEffect(() => {
-        if (!Capacitor.isNativePlatform()) return;
+        if (!Capacitor.isNativePlatform() || !userId || userId === 'current-user') return;
 
         // Solicitar permissão
         PushNotifications.requestPermissions().then(result => {
@@ -15,9 +16,10 @@ export const usePushNotifications = () => {
         });
 
         // On success registration
-        PushNotifications.addListener('registration', token => {
+        PushNotifications.addListener('registration', async token => {
             console.log('Push registration success, token: ' + token.value);
-            // Aqui você enviaria o token para o seu backend no Supabase
+            // Salvar o token no perfil do usuário no Supabase
+            await updateUserProfile(userId, { fcm_token: token.value });
         });
 
         // On registration error
@@ -33,5 +35,5 @@ export const usePushNotifications = () => {
         return () => {
             PushNotifications.removeAllListeners();
         };
-    }, []);
+    }, [userId]);
 };

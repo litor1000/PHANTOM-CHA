@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { ConversationList } from '@/components/chat/conversation-list'
 import { ChatView } from '@/components/chat/chat-view'
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
@@ -14,16 +15,31 @@ import { setupPresence } from '@/lib/supabase/presence'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BiometricLock } from '@/components/auth/biometric-lock'
 import { Capacitor } from '@capacitor/core'
+import { usePushNotifications } from '@/hooks/use-push-notifications'
+import { MessageSquare, Compass, Wallet, User as UserIcon } from 'lucide-react'
+import { DiscoverView } from '@/components/discover/discover-view'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { SettingsSheet } from '@/components/settings/settings-sheet'
+import { WalletView } from '@/components/wallet/wallet-view'
+import { PhotoAlbum, type AlbumPhoto } from '@/components/profile/photo-album'
 
 export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [user, setUser] = useState<CurrentUser | null>(null)
+
+  // Registrar Push Notifications quando o usuário estiver logado
+  usePushNotifications(user?.id)
   const [isLoading, setIsLoading] = useState(true)
   const [isLocked, setIsLocked] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [contacts, setContacts] = useState<User[]>([])
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([])
-  const [activeChat, setActiveChat] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'chats' | 'discover' | 'wallet' | 'profile'>('chats')
+  const [showSettings, setShowSettings] = useState(false)
+  const [showWallet, setShowWallet] = useState(false)
+  const [showAlbum, setShowAlbum] = useState(false)
+  const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([])
 
   const selectedUser = mockUsers.find((u) => u.id === selectedUserId) ||
     conversations.find(c => c.user.id === selectedUserId)?.user ||
@@ -38,6 +54,9 @@ export default function Home() {
 
       if (supabaseUser) {
         setUser(supabaseUser)
+        // Sync to localStorage to avoid flicker next time
+        localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
+
         if (Capacitor.isNativePlatform()) setIsLocked(true)
         // Load user-specific contacts
         const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
@@ -46,8 +65,13 @@ export default function Home() {
             setContacts(JSON.parse(savedContacts))
           } catch { }
         }
+
+        // Load album
+        const { getUserAlbum } = await import('@/lib/supabase/album')
+        const { data: albumData } = await getUserAlbum(supabaseUser.id)
+        if (albumData) setAlbumPhotos(albumData)
       } else {
-        // Fallback to localStorage
+        // Fallback to localStorage only if Supabase fails
         const savedUser = localStorage.getItem('phantom-user')
         if (savedUser) {
           try {
@@ -487,7 +511,7 @@ export default function Home() {
   useEffect(() => {
     if (!user?.id || user.id === 'current-user') return
 
-    const channel = setupPresence(user.id, (state) => {
+    const channel = setupPresence(user.id, user.isOnline ?? true, (state) => {
       // 1. Atualizar IDs Online
       const onlineIds = Object.keys(state).filter(id => id !== user.id)
       setOnlineUserIds(onlineIds)
@@ -507,7 +531,7 @@ export default function Home() {
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [user?.id])
+  }, [user?.id, user?.isOnline])
 
   // Update conversations and contacts online status
   const conversationsWithPresence = conversations.map(conv => ({
@@ -545,7 +569,6 @@ export default function Home() {
 
   const handleChatSelect = (userId: string) => {
     setSelectedUserId(userId)
-    setActiveChat(userId) // Set active chat for presence
     // Clear unread count locally for immediate feedback
     setConversations(prev => prev.map(conv => {
       if (conv.user.id === userId) {
@@ -572,7 +595,19 @@ export default function Home() {
   }
 
   return (
-    <main className="h-dvh w-full max-w-md mx-auto flex flex-col bg-background overflow-hidden shadow-2xl relative">
+    <main className="h-dvh w-full max-w-md mx-auto flex flex-col overflow-hidden shadow-2xl relative">
+      {/* Background Image Layer */}
+      <div className="absolute inset-0 -z-10 bg-zinc-950 pointer-events-none">
+        <Image
+          src="/images/onboarding-bg.png"
+          alt=""
+          fill
+          className="object-cover opacity-20"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-background/20 to-background" />
+      </div>
+
       <AnimatePresence>
         {selectedUserId && selectedUser ? (
           <motion.div
@@ -591,30 +626,164 @@ export default function Home() {
           </motion.div>
         ) : (
           <motion.div
-            key="conversation-list"
+            key="main-content"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="h-full w-full"
+            className="flex-1 overflow-hidden"
           >
-            <ConversationList
-              conversations={conversationsWithPresence}
-              onSelectConversation={handleChatSelect}
-              currentUser={currentUserWithPresence as CurrentUser}
-              onUpdateUser={setUser}
-              onLogout={handleLogout}
-              contacts={contactsWithPresence}
-              onAddContact={handleAddContact}
-              onCreateGroup={handleCreateGroup}
-              onAcceptInvite={handleAcceptInvite}
-              onRejectInvite={handleRejectInvite}
-              onDeleteConversation={handleDeleteConversation}
-              typingUserIds={typingToMe}
-            />
+            {activeTab === 'chats' && (
+              <ConversationList
+                conversations={conversationsWithPresence}
+                onSelectConversation={handleChatSelect}
+                currentUser={currentUserWithPresence as CurrentUser}
+                onUpdateUser={setUser}
+                onLogout={handleLogout}
+                contacts={contactsWithPresence}
+                onAddContact={handleAddContact}
+                onCreateGroup={handleCreateGroup}
+                onAcceptInvite={handleAcceptInvite}
+                onRejectInvite={handleRejectInvite}
+                onDeleteConversation={handleDeleteConversation}
+                typingUserIds={typingToMe}
+                onOpenSettings={() => setShowSettings(true)}
+                onOpenWallet={() => setShowWallet(true)}
+              />
+            )}
+            {activeTab === 'discover' && (
+              <DiscoverView
+                onSelectUser={(userId) => {
+                  setSelectedUserId(userId)
+                }}
+                currentUser={user as CurrentUser}
+              />
+            )}
+            {activeTab === 'wallet' && (
+              <div className="flex-1 h-full flex flex-col items-center justify-center text-muted-foreground p-10 text-center gap-4">
+                <Wallet className="w-16 h-16 opacity-20" />
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black uppercase tracking-widest text-foreground">Sua Carteira</h3>
+                  <p className="text-sm">Acesse o painel financeiro para gerenciar seus tokens e saques.</p>
+                </div>
+                <Button onClick={() => setShowWallet(true)}>Abrir Carteira</Button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Bottom Navigation Bar */}
+      {!selectedUserId && (
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-background/80 backdrop-blur-xl border-t border-border/40 px-6 py-3 z-40 flex items-center justify-between pb-8">
+          <BottomNavItem
+            icon={MessageSquare}
+            label="Chats"
+            isActive={activeTab === 'chats'}
+            onClick={() => setActiveTab('chats')}
+            badge={conversations.some(c => c.unreadCount > 0) ? true : false}
+          />
+          <BottomNavItem
+            icon={Compass}
+            label="Descobrir"
+            isActive={activeTab === 'discover'}
+            onClick={() => setActiveTab('discover')}
+          />
+          <BottomNavItem
+            icon={Wallet}
+            label="Carteira"
+            isActive={activeTab === 'wallet'}
+            onClick={() => setShowWallet(true)}
+          />
+          <BottomNavItem
+            icon={UserIcon}
+            label="Perfil"
+            isActive={activeTab === 'profile'}
+            onClick={() => setShowSettings(true)}
+          />
+        </nav>
+      )}
+
+      {user && (
+        <>
+          <SettingsSheet
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            user={user as CurrentUser}
+            onUpdateUser={setUser}
+            onLogout={handleLogout}
+            onOpenAlbum={() => {
+              setShowSettings(false)
+              setShowAlbum(true)
+            }}
+            onOpenWallet={() => {
+              setShowSettings(false)
+              setShowWallet(true)
+            }}
+          />
+
+          <PhotoAlbum
+            isOpen={showAlbum}
+            onClose={() => setShowAlbum(false)}
+            photos={albumPhotos}
+            onUpdatePhotos={setAlbumPhotos}
+            pendingRequests={[]} // For now empty, can be state later
+            onApproveRequest={() => { }}
+            onRejectRequest={() => { }}
+            onUploadPhoto={async (file) => {
+              const { uploadAlbumPhoto } = await import('@/lib/supabase/album')
+              const { data } = await uploadAlbumPhoto(user.id, file)
+              return data
+            }}
+            onDeletePhoto={async (photoId) => {
+              const { deleteAlbumPhoto } = await import('@/lib/supabase/album')
+              await deleteAlbumPhoto(photoId)
+            }}
+          />
+
+          <WalletView
+            isOpen={showWallet}
+            onClose={() => setShowWallet(false)}
+            currentUser={user as CurrentUser}
+          />
+        </>
+      )}
+
       <InstallPrompt />
     </main>
+  )
+}
+
+function BottomNavItem({
+  icon: Icon,
+  label,
+  isActive,
+  onClick,
+  badge
+}: {
+  icon: any,
+  label: string,
+  isActive: boolean,
+  onClick: () => void,
+  badge?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center gap-1 transition-all relative active:scale-90",
+        isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      <div className={cn(
+        "p-1.5 rounded-xl transition-all",
+        isActive && "bg-primary/10"
+      )}>
+        <Icon className={cn("w-6 h-6", isActive && "fill-current")} />
+      </div>
+      <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
+      {badge && (
+        <span className="absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full border border-background animate-pulse" />
+      )}
+    </button>
   )
 }

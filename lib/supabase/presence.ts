@@ -2,13 +2,20 @@ import { RealtimeChannel } from '@supabase/supabase-js'
 import { getSupabaseClient } from './client'
 
 let globalPresenceChannel: RealtimeChannel | null = null
+let currentIsVisible = true
 
 export const setupPresence = (
     userId: string,
+    isVisible: boolean,
     onPresenceChange: (presenceState: Record<string, any>) => void
 ) => {
     const supabase = getSupabaseClient()
     if (!supabase) return null
+
+    // Cleanup previous channel if exists
+    if (globalPresenceChannel) {
+        globalPresenceChannel.unsubscribe()
+    }
 
     const channel = supabase.channel('online-users', {
         config: {
@@ -19,6 +26,7 @@ export const setupPresence = (
     })
 
     globalPresenceChannel = channel
+    currentIsVisible = isVisible
 
     const handleStateChange = () => {
         const state = channel.presenceState()
@@ -30,15 +38,13 @@ export const setupPresence = (
             handleStateChange()
         })
         .on('presence', { event: 'join' }, ({ key }) => {
-            console.log('User joined:', key)
             handleStateChange()
         })
         .on('presence', { event: 'leave' }, ({ key }) => {
-            console.log('User left:', key)
             handleStateChange()
         })
         .subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
+            if (status === 'SUBSCRIBED' && isVisible) {
                 await channel.track({
                     online_at: new Date().toISOString(),
                     user_id: userId,
@@ -54,7 +60,7 @@ export const setupPresence = (
  * Atualiza o status de digitação no canal global
  */
 export const updateTypingStatus = async (userId: string, targetUserId: string | null) => {
-    if (globalPresenceChannel) {
+    if (globalPresenceChannel && currentIsVisible) {
         await globalPresenceChannel.track({
             online_at: new Date().toISOString(),
             user_id: userId,

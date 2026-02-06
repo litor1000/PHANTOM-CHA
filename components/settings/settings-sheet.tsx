@@ -16,6 +16,17 @@ import {
   ChevronRight,
   Info,
   Download,
+  Mail,
+  Shield,
+  Bell,
+  Lock,
+  Ban,
+  Monitor,
+  CreditCard,
+  MessageSquare,
+  UserCheck,
+  DollarSign,
+  EyeOff
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -48,33 +59,102 @@ export function SettingsSheet({
   const profileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
+  // Sub-views state
+  const [activeSubView, setActiveSubView] = useState<string | null>(null)
 
-  const handlePhotoChange = (
+  const [notifications, setNotifications] = useState({
+    messages: true,
+    accessRequests: true,
+    payments: true
+  })
+
+  // Edit Profile States
+  const [editName, setEditName] = useState(user.name)
+  const [editNickname, setEditNickname] = useState(user.nickname)
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
+
+  const handleNotificationChange = async (key: keyof typeof notifications, value: boolean) => {
+    const newNotifs = { ...notifications, [key]: value }
+    setNotifications(newNotifs)
+    // Here we could persist to Supabase if we had a notifications table
+    toast.success('Preferências de notificação atualizadas')
+  }
+
+  const handleUpdateProfileData = async () => {
+    setIsUpdatingProfile(true)
+    try {
+      const { updateUserProfile } = await import('@/lib/supabase/auth')
+      const { error } = await updateUserProfile(user.id, { name: editName, nickname: editNickname })
+      if (error) throw new Error(error)
+
+      onUpdateUser({ ...user, name: editName, nickname: editNickname })
+      toast.success('Perfil atualizado com sucesso!')
+      setActiveSubView(null)
+    } catch (err: any) {
+      toast.error('Erro ao atualizar: ' + err.message)
+    } finally {
+      setIsUpdatingProfile(false)
+    }
+  }
+
+  const handlePhotoChange = async (
     field: 'profilePhoto' | 'coverPhoto',
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
-      reader.onloadend = () => {
-        const photo = reader.result as string
+      reader.onloadend = async () => {
+        const photoData = reader.result as string
+
+        // Optimistic update
         if (field === 'profilePhoto') {
-          onUpdateUser({ ...user, profilePhoto: photo, avatar: photo })
+          onUpdateUser({ ...user, profilePhoto: photoData, avatar: photoData })
         } else {
-          onUpdateUser({ ...user, coverPhoto: photo })
+          onUpdateUser({ ...user, coverPhoto: photoData })
+        }
+
+        try {
+          const { uploadProfilePhoto, uploadCoverPhoto } = await import('@/lib/supabase/storage')
+          const { updateUserProfile } = await import('@/lib/supabase/auth')
+
+          let publicUrl = ''
+          if (field === 'profilePhoto') {
+            publicUrl = await uploadProfilePhoto(user.id, photoData) || ''
+            if (publicUrl) {
+              await updateUserProfile(user.id, { profilePhoto: publicUrl, avatar: publicUrl })
+              onUpdateUser({ ...user, profilePhoto: publicUrl, avatar: publicUrl })
+            }
+          } else {
+            publicUrl = await uploadCoverPhoto(user.id, photoData) || ''
+            if (publicUrl) {
+              await updateUserProfile(user.id, { coverPhoto: publicUrl })
+              onUpdateUser({ ...user, coverPhoto: publicUrl })
+            }
+          }
+
+          if (publicUrl) {
+            toast.success('Foto atualizada com sucesso!')
+          }
+        } catch (err) {
+          console.error(err)
+          toast.error('Erro ao salvar foto no servidor')
         }
       }
       reader.readAsDataURL(file)
     }
   }
 
-  const handleOnlineToggle = (checked: boolean) => {
+  const handleOnlineToggle = async (checked: boolean) => {
     setIsOnline(checked)
     onUpdateUser({ ...user, isOnline: checked })
-  }
 
-  const handleSaveTheme = () => {
-    onClose()
+    try {
+      const { updateUserProfile } = await import('@/lib/supabase/auth')
+      await updateUserProfile(user.id, { isOnline: checked })
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   const [tempPixKey, setTempPixKey] = useState(user.pix_key || '')
@@ -84,7 +164,9 @@ export function SettingsSheet({
   const handleSavePix = async () => {
     setIsSaving(true)
     try {
-      await onUpdateUser({ ...user, pix_key: tempPixKey, pix_key_type: tempPixKeyType })
+      const { updateUserProfile } = await import('@/lib/supabase/auth')
+      await updateUserProfile(user.id, { pix_key: tempPixKey, pix_key_type: tempPixKeyType })
+      onUpdateUser({ ...user, pix_key: tempPixKey, pix_key_type: tempPixKeyType })
       toast.success('Dados de pagamento atualizados!')
     } catch (e) {
       toast.error('Erro ao salvar')
@@ -95,225 +177,352 @@ export function SettingsSheet({
 
   if (!isOpen) return null
 
+  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+    <div className="px-4 py-3 mt-4 first:mt-2 bg-muted/30">
+      <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{children}</p>
+    </div>
+  )
+
+  const SettingItem = ({
+    icon: Icon,
+    label,
+    value,
+    onClick,
+    showChevron = true,
+    destructive = false,
+    iconColor = "text-muted-foreground"
+  }: any) => (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full px-4 py-4 flex items-center justify-between border-b border-border/40 hover:bg-secondary/30 transition-all active:scale-[0.98]",
+        destructive && "text-red-500"
+      )}
+    >
+      <div className="flex items-center gap-4">
+        <div className={cn("w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center", destructive ? "bg-red-500/10" : "bg-white/5")}>
+          <Icon className={cn("w-4 h-4", destructive ? "text-red-500" : iconColor)} />
+        </div>
+        <div className="text-left">
+          <p className="text-sm font-bold tracking-tight">{label}</p>
+          {value && <p className="text-[11px] text-muted-foreground font-medium">{value}</p>}
+        </div>
+      </div>
+      {showChevron && <ChevronRight className="w-4 h-4 text-muted-foreground/40" />}
+    </button>
+  )
+
+  const ToggleItem = ({
+    icon: Icon,
+    label,
+    value,
+    checked,
+    onChange,
+    iconColor = "text-muted-foreground"
+  }: any) => (
+    <div className="px-4 py-4 flex items-center justify-between border-b border-border/40">
+      <div className="flex items-center gap-4">
+        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+          <Icon className={cn("w-4 h-4", iconColor)} />
+        </div>
+        <div className="text-left">
+          <p className="text-sm font-bold tracking-tight">{label}</p>
+          {value && <p className="text-[11px] text-muted-foreground font-medium">{value}</p>}
+        </div>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  )
+
+  const SubViewContainer = ({ title, children, onBack }: { title: string, children: React.ReactNode, onBack: () => void }) => (
+    <div className="absolute inset-0 bg-zinc-950 z-50 flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="flex items-center gap-4 px-4 h-16 border-b border-white/5 bg-zinc-900/50">
+        <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full">
+          <ChevronRight className="w-5 h-5 rotate-180" />
+        </Button>
+        <h3 className="font-black uppercase tracking-widest text-sm">{title}</h3>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md">
       <div
         className={cn(
-          'fixed inset-y-0 right-0 w-full max-w-sm bg-background border-l border-border shadow-xl',
+          'fixed inset-y-0 right-0 w-full max-w-sm bg-zinc-950 border-l border-white/10 shadow-2xl overflow-hidden',
           'flex flex-col',
-          'animate-in slide-in-from-right duration-300'
+          'animate-in slide-in-from-right duration-500 ease-out'
         )}
       >
-        {/* Header with Cover */}
-        <div className="relative h-32 bg-gradient-to-br from-primary/30 to-primary/10">
-          {user.coverPhoto && (
+        {/* Sub-Views Overlay */}
+        {activeSubView === 'edit-profile' && (
+          <SubViewContainer title="Editar Perfil" onBack={() => setActiveSubView(null)}>
+            <div className="p-4 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase px-1">Nome de Exibição</label>
+                <input
+                  type="text"
+                  className="w-full h-12 bg-zinc-900 border border-white/5 rounded-2xl px-4 text-sm font-bold"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase px-1">Seu Apelido (@)</label>
+                <input
+                  type="text"
+                  className="w-full h-12 bg-zinc-900 border border-white/5 rounded-2xl px-4 text-sm font-bold"
+                  value={editNickname}
+                  onChange={(e) => setEditNickname(e.target.value)}
+                />
+              </div>
+              <Button
+                className="w-full h-12 bg-primary text-black font-black uppercase tracking-widest rounded-2xl mt-4"
+                onClick={handleUpdateProfileData}
+                disabled={isUpdatingProfile}
+              >
+                {isUpdatingProfile ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </div>
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'blocked' && (
+          <SubViewContainer title="Usuários Bloqueados" onBack={() => setActiveSubView(null)}>
+            <div className="p-10 text-center space-y-4">
+              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto opacity-20">
+                <Ban className="w-10 h-10" />
+              </div>
+              <p className="text-sm text-muted-foreground font-medium">Nenhum usuário bloqueado no momento.</p>
+            </div>
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'security' && (
+          <SubViewContainer title="Segurança" onBack={() => setActiveSubView(null)}>
+            <SectionLabel>Senha</SectionLabel>
+            <SettingItem icon={Lock} label="Alterar Senha" value="Última alteração: 3 meses atrás" onClick={() => toast.info('Link para alteração enviado ao seu e-mail')} />
+
+            <SectionLabel>Acesso</SectionLabel>
+            <div className="px-4 py-4 space-y-4">
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Monitor className="w-5 h-5 text-green-500" />
+                  <div>
+                    <p className="text-sm font-bold">Este Dispositivo (Android)</p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Sessão Ativa Agora • São Paulo, BR</p>
+                  </div>
+                </div>
+                <Badge className="bg-green-500/20 text-green-500 text-[8px] border-none font-black">ATUAL</Badge>
+              </div>
+              <Button variant="ghost" className="w-full text-xs text-red-500 font-bold uppercase tracking-widest hover:bg-red-500/5">Encerrar Todas as Outras Sessões</Button>
+            </div>
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'help' && (
+          <SubViewContainer title="Ajuda e Suporte" onBack={() => setActiveSubView(null)}>
+            <SectionLabel>Canais de Atendimento</SectionLabel>
+            <SettingItem icon={MessageSquare} label="Chat de Suporte" value="Resposta em até 24h" onClick={() => toast.info('Iniciando chat de suporte...')} />
+            <SettingItem icon={Mail} label="E-mail de Suporte" value="ajuda@phantomchat.com" onClick={() => window.open('mailto:ajuda@phantomchat.com')} iconColor="text-blue-400" />
+
+            <SectionLabel>FAQ</SectionLabel>
+            <SettingItem icon={Info} label="Como funcionam os tokens?" />
+            <SettingItem icon={Shield} label="Segurança do Álbum" />
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'terms' && (
+          <SubViewContainer title="Termos e Privacidade" onBack={() => setActiveSubView(null)}>
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <h4 className="font-black uppercase tracking-tighter text-xs text-primary">Termos de Uso</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  O Phantom Chat é uma plataforma de mensagens efêmeras. Ao usar o app, você concorda que o conteúdo compartilhado em mensagens "Phantom" é deletado permanentemente dos nossos servidores após a expiração.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-black uppercase tracking-tighter text-xs text-primary">Privacidade</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Nós não vendemos seus dados. Suas fotos privadas são criptografadas e só podem ser visualizadas por quem você der permissão explícita.
+                </p>
+              </div>
+            </div>
+          </SubViewContainer>
+        )}
+
+        {/* Header/Cover Section */}
+        <div className="relative h-44 bg-zinc-900 overflow-hidden">
+          {(user.coverPhoto || user.avatar) ? (
             <Image
-              src={user.coverPhoto || "/placeholder.svg"}
+              src={user.coverPhoto || user.avatar || "/placeholder.svg"}
               alt="Capa"
               fill
-              className="object-cover"
+              className="object-cover opacity-50 contrast-125 saturate-50"
             />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-zinc-900 to-zinc-950" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="absolute top-3 right-3 bg-background/50 hover:bg-background/80"
+            className="absolute top-4 right-4 bg-black/40 hover:bg-black/60 text-white rounded-full z-30 transition-all hover:scale-110"
           >
             <X className="h-5 w-5" />
           </Button>
 
+          {/* Cover Edit Button */}
           <button
             onClick={() => coverInputRef.current?.click()}
-            className="absolute top-3 left-3 w-8 h-8 rounded-full bg-background/50 hover:bg-background/80 flex items-center justify-center transition-colors"
+            className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/40 hover:bg-white text-white hover:text-black flex items-center justify-center transition-all z-30 shadow-lg"
           >
-            <ImageIcon className="w-4 h-4 text-foreground" />
+            <ImageIcon className="w-4 h-4" />
           </button>
-          <input
-            ref={coverInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => handlePhotoChange('coverPhoto', e)}
-          />
+          <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handlePhotoChange('coverPhoto', e)} />
 
-          {/* Profile Photo */}
-          <div className="absolute -bottom-10 left-4">
-            <button
-              onClick={() => profileInputRef.current?.click()}
-              className="relative w-20 h-20 rounded-full bg-card border-4 border-background overflow-hidden group"
-            >
-              {user.profilePhoto ? (
-                <Image
-                  src={user.profilePhoto || "/placeholder.svg"}
-                  alt={user.name}
-                  fill
-                  className="object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-card">
-                  <User className="w-8 h-8 text-muted-foreground" />
+          {/* Profile Backdrop Area */}
+          <div className="absolute bottom-0 left-0 right-0 p-5 flex items-end gap-4 z-20">
+            <div className="relative group">
+              <button
+                onClick={() => profileInputRef.current?.click()}
+                className="relative w-24 h-24 rounded-3xl bg-zinc-900 border-4 border-zinc-950 overflow-hidden group shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-transform group-active:scale-95"
+              >
+                {(user.profilePhoto || user.avatar) ? (
+                  <Image src={user.profilePhoto || user.avatar || "/placeholder.svg"} alt={user.name} fill className="object-cover transition-transform group-hover:scale-110" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                    <User className="w-10 h-10 text-zinc-600" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera className="w-6 h-6 text-white" />
                 </div>
-              )}
-              <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Camera className="w-5 h-5 text-foreground" />
-              </div>
-            </button>
-            <input
-              ref={profileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => handlePhotoChange('profilePhoto', e)}
-            />
+              </button>
+              <input ref={profileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handlePhotoChange('profilePhoto', e)} />
+            </div>
+
+            <div className="mb-2">
+              <h2 className="text-xl font-black text-white tracking-tight leading-none mb-1">{user.name}</h2>
+              <p className="text-xs font-bold text-primary/80 uppercase tracking-tighter italic">@{user.nickname}</p>
+            </div>
           </div>
         </div>
 
-        {/* User Info */}
-        <div className="px-4 pt-14 pb-4 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">{user.name}</h2>
-          <p className="text-sm text-muted-foreground">@{user.nickname}</p>
-        </div>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto pb-10 custom-scrollbar">
 
-        {/* Settings Options */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Status Online */}
-          <div className="px-4 py-3 flex items-center justify-between border-b border-border/50">
-            <div className="flex items-center gap-3">
-              {isOnline ? (
-                <Wifi className="w-5 h-5 text-green-500" />
-              ) : (
-                <WifiOff className="w-5 h-5 text-muted-foreground" />
-              )}
-              <div>
-                <p className="text-sm font-medium text-foreground">Status Online</p>
-                <p className="text-xs text-muted-foreground">
-                  {isOnline ? 'Voce esta visivel' : 'Voce esta invisivel'}
-                </p>
+          <SectionLabel>Conta</SectionLabel>
+          <SettingItem icon={User} label="Editar Perfil" value="Nome, Nickname, Bio" onClick={() => setActiveSubView('edit-profile')} iconColor="text-blue-400" />
+          <SettingItem icon={Mail} label="E-mail" value={user.email} iconColor="text-indigo-400" />
+          <SettingItem icon={Images} label="Minhas Fotos" value="Gerenciar álbum privado" onClick={onOpenAlbum} iconColor="text-purple-400" />
+
+          <SectionLabel>Pagamentos</SectionLabel>
+          <div className={cn("px-4 py-5 border-b border-white/5", user.needs_pix_update ? "bg-red-500/5" : "bg-zinc-900/20")}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <p className="text-sm font-bold tracking-tight">Chave Pix</p>
               </div>
-            </div>
-            <Switch
-              checked={isOnline}
-              onCheckedChange={handleOnlineToggle}
-            />
-          </div>
-
-          {/* Pix Key Settings */}
-          <div className={cn("px-4 py-4 border-b border-border/50", user.needs_pix_update ? "bg-orange-500/10" : "bg-muted/20")}>
-            <div className="flex items-center justify-between mb-3 px-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">Dados de Pagamento (Recebimento)</p>
-              {user.needs_pix_update && <Badge className="bg-orange-500 text-[8px] h-4">AÇÃO NECESSÁRIA</Badge>}
+              {user.needs_pix_update && <Badge className="bg-red-500 text-[8px] px-1.5 h-4 font-black">REJEITADA</Badge>}
             </div>
 
-            {user.needs_pix_update && (
-              <div className="mb-4 p-2 bg-orange-500/20 border border-orange-500/30 rounded-md flex gap-2">
-                <Info className="w-4 h-4 text-orange-600 shrink-0" />
-                <p className="text-[10px] text-orange-800 leading-tight">
-                  Seu último saque foi rejeitado por erro nos dados. Por favor, atualize sua chave Pix e salve para solicitar novamente.
-                </p>
-              </div>
-            )}
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground px-1">Tipo de Chave Pix</label>
-                <select
-                  className="w-full h-9 bg-background border border-border rounded-md px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={tempPixKeyType}
-                  onChange={(e) => setTempPixKeyType(e.target.value)}
-                >
-                  <option value="CPF">CPF</option>
-                  <option value="Email">E-mail</option>
-                  <option value="Telefone">Telefone</option>
-                  <option value="Aleatoria">Chave Aleatória (EVP)</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground px-1">Chave Pix</label>
-                <input
-                  type="text"
-                  placeholder="Sua chave pix aqui"
-                  className="w-full h-9 bg-background border border-border rounded-md px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={tempPixKey}
-                  onChange={(e) => setTempPixKey(e.target.value)}
-                />
-              </div>
+              <select
+                className="w-full h-10 bg-zinc-900 border border-white/5 rounded-xl px-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500/50 appearance-none text-white"
+                value={tempPixKeyType}
+                onChange={(e) => setTempPixKeyType(e.target.value)}
+              >
+                <option value="CPF">CPF</option>
+                <option value="Email">E-mail</option>
+                <option value="Telefone">Telefone</option>
+                <option value="Aleatoria">Chave Aleatória (EVP)</option>
+              </select>
+
+              <input
+                type="text"
+                placeholder="Insira sua chave Pix"
+                className="w-full h-10 bg-zinc-900 border border-white/5 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500/50 text-white"
+                value={tempPixKey}
+                onChange={(e) => setTempPixKey(e.target.value)}
+              />
 
               <Button
                 onClick={handleSavePix}
-                className="w-full h-8 text-xs bg-primary hover:bg-primary/90"
+                className="w-full h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-500/10"
                 disabled={isSaving || (tempPixKey === user.pix_key && tempPixKeyType === user.pix_key_type)}
               >
-                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                {isSaving ? 'Salvando...' : 'Salvar Chave Pix'}
               </Button>
-
-              <p className="text-[10px] text-muted-foreground px-1 italic">
-                * Mantenha atualizado para receber seus pagamentos.
-              </p>
             </div>
           </div>
+          <SettingItem icon={Wallet} label="Meus Ganhos" value={`₮ ${user.wallet_balance || 0} Disponíveis`} onClick={onOpenWallet} iconColor="text-amber-400" />
 
-          {/* Album de Fotos */}
-          <button
-            onClick={onOpenAlbum}
-            className="w-full px-4 py-3 flex items-center justify-between border-b border-border/50 hover:bg-secondary/50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Images className="w-5 h-5 text-primary" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-foreground">Album de Fotos</p>
-                <p className="text-xs text-muted-foreground">Gerenciar minhas fotos privadas</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
+          <SectionLabel>Privacidade</SectionLabel>
+          <ToggleItem
+            icon={isOnline ? Wifi : WifiOff}
+            label="Ocultar Atividade"
+            value={isOnline ? "Você está visível" : "Modo invisível ativo"}
+            checked={!isOnline}
+            onChange={(checked: boolean) => handleOnlineToggle(!checked)}
+            iconColor={isOnline ? "text-green-500" : "text-muted-foreground"}
+          />
+          <SettingItem icon={Ban} label="Usuários Bloqueados" onClick={() => setActiveSubView('blocked')} value="0 usuários" iconColor="text-red-400" />
 
-          {/* Carteira */}
-          <button
-            onClick={onOpenWallet}
-            className="w-full px-4 py-3 flex items-center justify-between border-b border-border/50 hover:bg-secondary/50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Wallet className="w-5 h-5 text-amber-500" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-foreground">Carteira</p>
-                <p className="text-xs text-muted-foreground">{user.wallet_balance || 0} tokens disponiveis</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
+          <SectionLabel>Notificações</SectionLabel>
+          <ToggleItem
+            icon={MessageSquare}
+            label="Mensagens"
+            checked={notifications.messages}
+            onChange={(c: boolean) => handleNotificationChange('messages', c)}
+            iconColor="text-sky-400"
+          />
+          <ToggleItem
+            icon={UserCheck}
+            label="Pedido de Acesso"
+            checked={notifications.accessRequests}
+            onChange={(c: boolean) => handleNotificationChange('accessRequests', c)}
+            iconColor="text-pink-400"
+          />
+          <ToggleItem
+            icon={DollarSign}
+            label="Pagamentos"
+            checked={notifications.payments}
+            onChange={(c: boolean) => handleNotificationChange('payments', c)}
+            iconColor="text-emerald-400"
+          />
 
-          {/* Instalar Aplicativo */}
-          <button
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('phantom-open-install-prompt'))
-            }}
-            className="w-full px-4 py-3 flex items-center justify-between border-b border-border/50 hover:bg-secondary/50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Download className="w-5 h-5 text-indigo-500" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-foreground">Instalar Aplicativo</p>
-                <p className="text-xs text-muted-foreground">Usar o Phantom como um App</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
+          <SectionLabel>Segurança</SectionLabel>
+          <SettingItem icon={Lock} label="Segurança da Conta" value="Senha e Sessões" onClick={() => setActiveSubView('security')} iconColor="text-zinc-400" />
 
-          {/* Cor do Tema removida */}
-        </div>
+          <SectionLabel>Mais</SectionLabel>
+          <SettingItem
+            icon={Download}
+            label="Instalar Aplicativo"
+            onClick={() => window.dispatchEvent(new CustomEvent('phantom-open-install-prompt'))}
+            iconColor="text-indigo-400"
+          />
+          <SettingItem icon={Info} label="Central de Ajuda" onClick={() => setActiveSubView('help')} iconColor="text-zinc-500" />
+          <SettingItem icon={Shield} label="Termos e Privacidade" onClick={() => setActiveSubView('terms')} iconColor="text-zinc-500" />
 
-        {/* Logout */}
-        <div className="p-4 border-t border-border">
-          <Button
-            variant="destructive"
-            className="w-full"
-            onClick={onLogout}
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sair da conta
-          </Button>
+          <div className="px-4 py-8">
+            <Button
+              variant="destructive"
+              className="w-full h-12 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 font-black uppercase tracking-[0.2em] rounded-2xl transition-all active:scale-95 group"
+              onClick={onLogout}
+            >
+              <LogOut className="w-4 h-4 mr-3 transition-transform group-hover:-translate-x-1" />
+              Sair da conta
+            </Button>
+            <p className="text-[10px] text-zinc-700 font-bold uppercase tracking-widest text-center mt-6 italic">Phantom Chat v2.4.0</p>
+          </div>
         </div>
       </div>
     </div>

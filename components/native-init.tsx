@@ -7,7 +7,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
 
 export function NativeInit() {
-    // usePushNotifications() // Desativado temporariamente para evitar crash sem google-services.json
+    // Note: usePushNotifications is handled in Home (page.tsx) to ensure we have the user ID
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {

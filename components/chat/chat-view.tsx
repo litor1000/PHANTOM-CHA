@@ -596,6 +596,12 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     const { getSupabaseClient } = await import('@/lib/supabase/client')
     const supabase = getSupabaseClient()
     if (supabase) {
+      // If it's a chat request, also add to contacts
+      if (metadata?.requestType === 'chat' && currentUserData?.id) {
+        const { addContact } = await import('@/lib/supabase/contacts')
+        await addContact(currentUserData.id, user.nickname)
+      }
+
       await (supabase.from('messages') as any).update({
         metadata: { ...metadata, status: 'accepted' }
       }).eq('id', messageId)

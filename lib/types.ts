@@ -13,6 +13,7 @@ export interface User {
   pix_key_type?: string
   is_blocked?: boolean
   needs_pix_update?: boolean
+  fcm_token?: string
 }
 
 export interface CurrentUser extends User {
