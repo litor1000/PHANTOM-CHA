@@ -25,6 +25,14 @@ Responda sempre em Português do Brasil. Responda de forma direta e curta, como 
 
 export async function POST(req: Request) {
     try {
+        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+        if (!apiKey) {
+            return Response.json({
+                error: 'Chave de API (GOOGLE_GENERATIVE_AI_API_KEY) não encontrada no servidor.'
+            }, { status: 401 });
+        }
+
         const { messages } = await req.json();
 
         const { text } = await generateText({
@@ -34,8 +42,16 @@ export async function POST(req: Request) {
         });
 
         return Response.json({ text });
-    } catch (error) {
-        console.error('Erro na API de Chat:', error);
-        return Response.json({ error: 'Falha ao processar resposta da IA' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Erro detalhado na API de Chat:', error);
+
+        // Tenta extrair a mensagem de erro real do Google
+        const errorMessage = error.message || 'Erro desconhecido na IA';
+        const statusCode = error.status || 500;
+
+        return Response.json({
+            error: `Erro na IA: ${errorMessage}`,
+            details: error.data || null
+        }, { status: statusCode });
     }
 }
