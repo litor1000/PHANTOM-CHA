@@ -5,7 +5,7 @@ import {
     ArrowLeft, Wallet, Plus, Minus, Search, User as UserIcon,
     ShieldAlert, Ban, CheckCircle2, XCircle, Clock, ExternalLink,
     RefreshCw, BarChart3, Info, TrendingUp, Users as UsersIcon,
-    ArrowUpRight, History
+    ArrowUpRight, History, Edit3
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -118,6 +118,29 @@ export default function AdminPage() {
             }
         } catch (e) {
             alert('Erro inesperado')
+        }
+    }
+
+    const handleSetBalance = async (userId: string) => {
+        const newBalance = prompt('Digite o NOVO saldo total para este usuário:')
+        if (newBalance === null) return
+        const amount = parseFloat(newBalance.replace(',', '.'))
+        if (isNaN(amount)) return alert('Valor inválido')
+
+        if (!confirm(`Deseja DEFINIR o saldo para ₮ ${amount}?`)) return
+
+        try {
+            const { getSupabaseClient } = await import('@/lib/supabase/client')
+            const supabase = getSupabaseClient()
+            if (supabase) {
+                await (supabase.rpc as any)('admin_set_balance', {
+                    p_user_id: userId,
+                    p_new_balance: amount
+                })
+                loadData()
+            }
+        } catch (e) {
+            alert('Erro ao definir saldo')
         }
     }
 
@@ -251,49 +274,58 @@ export default function AdminPage() {
             <div className="max-w-7xl mx-auto space-y-8">
 
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-5">
-                        <Link href="/">
-                            <Button variant="outline" size="icon" className="rounded-full h-12 w-12 border-border/40 bg-secondary/20 hover:bg-secondary/40">
-                                <ArrowLeft className="w-6 h-6" />
-                            </Button>
-                        </Link>
-                        <div>
-                            <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-3">
-                                <ShieldAlert className="w-8 h-8 text-primary" />
-                                Phantom Admin
-                                <Button variant="ghost" size="icon" onClick={handleLogoutAdmin} className="h-6 w-6 text-muted-foreground hover:text-destructive">
-                                    <XCircle className="w-4 h-4" />
+                <div className="flex flex-col gap-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <Link href="/">
+                                <Button variant="outline" size="icon" className="rounded-xl h-10 w-10 border-border/40 bg-secondary/20">
+                                    <ArrowLeft className="w-5 h-5" />
                                 </Button>
-                            </h1>
-                            <p className="text-muted-foreground text-sm font-medium">Gestão econômica e moderação de rede</p>
+                            </Link>
+                            <div>
+                                <h1 className="text-2xl font-black tracking-tighter flex items-center gap-2">
+                                    Phantom Admin
+                                    <Button variant="ghost" size="icon" onClick={handleLogoutAdmin} className="h-6 w-6 text-muted-foreground hover:text-destructive">
+                                        <XCircle className="w-4 h-4" />
+                                    </Button>
+                                </h1>
+                            </div>
                         </div>
+                        <Badge variant="outline" className="border-primary/20 text-primary font-bold px-3 py-1 bg-primary/5 uppercase text-[10px] tracking-widest hidden sm:flex">Modo Diretor</Badge>
                     </div>
 
-                    <div className="flex bg-secondary/40 backdrop-blur-md p-1.5 rounded-2xl border border-border/50">
+                    {/* New Mobile-First Tab Switcher */}
+                    <div className="grid grid-cols-2 p-1 bg-secondary/30 backdrop-blur-md rounded-2xl border border-white/5">
                         <button
-                            onClick={() => setActiveTab('users')}
+                            onClick={() => {
+                                setActiveTab('users')
+                                window.scrollTo({ top: 0, behavior: 'smooth' })
+                            }}
                             className={cn(
-                                "px-6 py-2.5 text-sm font-bold rounded-xl transition-all duration-200",
-                                activeTab === 'users' ? "bg-background text-primary shadow-lg" : "text-muted-foreground hover:text-foreground"
+                                "flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest transition-all rounded-xl",
+                                activeTab === 'users' ? "bg-primary text-black shadow-[0_0_20px_rgba(168,85,247,0.3)] scale-[0.98]" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <div className="flex items-center gap-2">
-                                <UsersIcon className="w-4 h-4" />
-                                Usuários
-                            </div>
+                            <UsersIcon className="w-4 h-4" />
+                            Usuários
                         </button>
                         <button
-                            onClick={() => setActiveTab('withdrawals')}
+                            onClick={() => {
+                                setActiveTab('withdrawals')
+                                window.scrollTo({ top: 0, behavior: 'smooth' })
+                            }}
                             className={cn(
-                                "px-6 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center gap-2",
-                                activeTab === 'withdrawals' ? "bg-background text-primary shadow-lg" : "text-muted-foreground hover:text-foreground"
+                                "flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest transition-all rounded-xl relative",
+                                activeTab === 'withdrawals' ? "bg-primary text-black shadow-[0_0_20px_rgba(168,85,247,0.3)] scale-[0.98]" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             <Wallet className="w-4 h-4" />
                             Saques
                             {platformStats.pending_withdrawals_count > 0 && (
-                                <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
+                                <span className={cn(
+                                    "absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black border-2 border-background",
+                                    activeTab === 'withdrawals' ? "bg-black text-white" : "bg-red-500 text-white animate-pulse"
+                                )}>
                                     {platformStats.pending_withdrawals_count}
                                 </span>
                             )}
@@ -392,9 +424,20 @@ export default function AdminPage() {
                                     </CardHeader>
 
                                     <CardContent className="space-y-5 px-4 pb-6">
-                                        <div className="flex justify-between items-baseline bg-secondary/20 p-3 rounded-xl border border-border/30">
-                                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Saldo Carteira</span>
-                                            <span className="text-xl font-black text-primary tracking-tight">₮ {user.wallet_balance}</span>
+                                        <div className="flex justify-between items-center bg-secondary/20 p-3 rounded-xl border border-border/30">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Saldo Carteira</span>
+                                                <span className="text-xl font-black text-primary tracking-tight">₮ {user.wallet_balance}</span>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors"
+                                                onClick={() => handleSetBalance(user.id)}
+                                                title="Editar Saldo Total"
+                                            >
+                                                <Edit3 className="w-4 h-4" />
+                                            </Button>
                                         </div>
 
                                         <div className="space-y-2">

@@ -18,26 +18,40 @@ export function InstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
 
     useEffect(() => {
-        // 1. Detect platform
-        const ua = window.navigator.userAgent.toLowerCase()
-        if (/iphone|ipad|ipod/.test(ua)) {
-            setPlatform('ios')
-        } else if (/android/.test(ua)) {
-            setPlatform('android')
+        // Import Capacitor and check native platform
+        const checkNative = async () => {
+            const { Capacitor } = await import('@capacitor/core')
+            return Capacitor.isNativePlatform()
         }
 
-        // 2. Check if already installed
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-        const hasSeenPrompt = localStorage.getItem('phantom-install-prompt-seen')
+        const setup = async () => {
+            const isNative = await checkNative()
 
-        // Only show if not installed and hasn't seen it recently
-        if (!isStandalone && !hasSeenPrompt) {
-            // Delay to not annoy immediately
-            const timer = setTimeout(() => {
-                setShowPrompt(true)
-            }, 5000)
-            return () => clearTimeout(timer)
+            // 1. Detect platform
+            const ua = window.navigator.userAgent.toLowerCase()
+            if (/iphone|ipad|ipod/.test(ua)) {
+                setPlatform('ios')
+            } else if (/android/.test(ua)) {
+                setPlatform('android')
+            }
+
+            // 2. Check if already installed
+            // standalone: PWA mode
+            // isNative: Android APK/IOS App mode
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone
+            const hasSeenPrompt = localStorage.getItem('phantom-install-prompt-seen')
+
+            // Only show if not installed, not native and hasn't seen it recently
+            if (!isStandalone && !isNative && !hasSeenPrompt) {
+                // Delay to not annoy immediately
+                const timer = setTimeout(() => {
+                    setShowPrompt(true)
+                }, 5000)
+                return () => clearTimeout(timer)
+            }
         }
+
+        setup()
 
         // 3. Listen for Android installation prompt
         const handleBeforeInstallPrompt = (e: any) => {

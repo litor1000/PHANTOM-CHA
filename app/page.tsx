@@ -151,8 +151,32 @@ export default function Home() {
 
       window.addEventListener('tutorial-completed', handleTutorialComplete)
 
+      // Listen for support chat request from settings
+      const handleOpenSupport = async () => {
+        const { SUPPORT_BOT, createSupportConversation } = await import('@/lib/bot-data')
+        const supportConv = createSupportConversation()
+
+        setConversations(prev => {
+          if (prev.find(c => c.id === supportConv.id)) return prev
+          const newConvs = [supportConv, ...prev]
+          localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
+          return newConvs
+        })
+
+        setContacts(prev => {
+          if (prev.find(c => c.id === SUPPORT_BOT.id)) return prev
+          return [SUPPORT_BOT, ...prev]
+        })
+
+        setSelectedUserId(SUPPORT_BOT.id)
+        setActiveTab('chats')
+      }
+
+      window.addEventListener('open-support-chat', handleOpenSupport)
+
       return () => {
         window.removeEventListener('tutorial-completed', handleTutorialComplete)
+        window.removeEventListener('open-support-chat', handleOpenSupport)
       }
     }
 
@@ -170,22 +194,21 @@ export default function Home() {
 
       if (data && !error) {
         setConversations(prev => {
-          // Preserve tutorial bot if it exists
+          // Preserve bots (Tutorial and Support) if they exist in state
           const tutorial = prev.find(c => c.id === 'conv-bot-tutorial')
+          const support = prev.find(c => c.id === 'conv-bot-support')
 
-          // If we found new conversations, use them
-          // We need to be careful not to cause infinite re-renders if data is "same"
-          // ideally we'd compare deep equality, but focused on "updates"
-          // For now, just setting it is fine as React handles some diffing, 
-          // but if the object refs change, it re-renders. 
-          // Given this is a prototype/fix, it's acceptable.
+          // Filter out bots from fetched data to avoid duplicates/overwrites
+          let finalData = data.filter((c: any) =>
+            c.id !== 'conv-bot-tutorial' &&
+            c.id !== 'conv-bot-support'
+          )
 
-          if (tutorial) {
-            // Filter out tutorial from fetched data if it somehow appeared (unlikely)
-            const filteredData = data.filter((c: any) => c.id !== 'conv-bot-tutorial')
-            return [tutorial, ...filteredData]
-          }
-          return data
+          // Re-insert bots at the top if they were in state
+          if (support) finalData = [support, ...finalData]
+          if (tutorial) finalData = [tutorial, ...finalData]
+
+          return finalData
         })
       }
     }
@@ -236,53 +259,48 @@ export default function Home() {
     }
   }, [user?.id])
 
-  // Reload contacts from Supabase on init and sync local contacts
+  // Reload contacts from Supabase with optimistic local state
   useEffect(() => {
     if (user?.id && user.id !== 'current-user') {
       const loadAndSyncContacts = async () => {
         const { getContacts, addContact } = await import('@/lib/supabase/contacts')
 
-        // 1. Fetch current DB contacts
-        const { data: dbContacts } = await getContacts(user.id)
-        let finalContacts = dbContacts || []
-
-        // 2. Check for local contacts (migration/sync)
+        // 1. Try to load from LocalStorage first for instant UI
         const localKey = `phantom-contacts-${user.id}`
         const localStr = localStorage.getItem(localKey)
-        let localContacts: User[] = []
+        if (localStr && contacts.length === 0) {
+          try {
+            const cached = JSON.parse(localStr)
+            setContacts(cached)
+          } catch { }
+        }
+
+        // 2. Fetch current DB contacts in background
+        const { data: dbContacts } = await getContacts(user.id)
+        if (!dbContacts) return
+
+        // 3. Update state and cache if DB is different or state is empty
+        setContacts(dbContacts)
+        localStorage.setItem(localKey, JSON.stringify(dbContacts))
+
+        // 4. Background sync for orphaned local contacts (rarely needed after first migration)
         if (localStr) {
           try {
-            localContacts = JSON.parse(localStr)
-          } catch (e) {
-            console.error("Error parsing local contacts", e)
-          }
-        }
+            const localContacts: User[] = JSON.parse(localStr)
+            const dbNicknames = new Set(dbContacts.map(c => c.nickname.toLowerCase()))
+            const missingInDb = localContacts.filter(c => !dbNicknames.has(c.nickname.toLowerCase()))
 
-        // 3. If we have local contacts that are not in DB, sync them up
-        if (localContacts.length > 0) {
-          const dbNicknames = new Set(finalContacts.map(c => c.nickname.toLowerCase()))
-          const missingInDb = localContacts.filter(c => !dbNicknames.has(c.nickname.toLowerCase()))
-
-          if (missingInDb.length > 0) {
-            console.log(`Syncing ${missingInDb.length} local contacts to Supabase...`)
-
-            // Add them sequentially to ensure strict order/limits if needed
-            for (const contact of missingInDb) {
-              // We try to add by nickname. If the user doesn't exist in DB (was a mock user), 
-              // this might fail, effectively filtering out invalid mock data.
-              await addContact(user.id, contact.nickname)
+            if (missingInDb.length > 0) {
+              console.log(`Syncing ${missingInDb.length} local contacts to Supabase in background...`)
+              // Sync non-mock users only
+              for (const contact of missingInDb) {
+                if (!contact.id.startsWith('mock-')) {
+                  await addContact(user.id, contact.nickname)
+                }
+              }
             }
-
-            // Refetch to get the updated list from DB source of truth
-            const { data: refetched } = await getContacts(user.id)
-            if (refetched) {
-              finalContacts = refetched
-            }
-          }
+          } catch { }
         }
-
-        // 4. Update state
-        setContacts(finalContacts)
       }
 
       loadAndSyncContacts()

@@ -34,6 +34,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const storageKey = `phantom-messages-${user.id}`
   const isTutorialBot = user.id === TUTORIAL_BOT_ID
+  const isSupportBot = user.id === 'bot-support'
 
   const {
     getTutorialMessages,
@@ -78,7 +79,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
   // Check if contact
   useEffect(() => {
-    if (!currentUserData?.id || isTutorialBot) return
+    if (!currentUserData?.id || isTutorialBot || isSupportBot) return
 
     const checkContact = async () => {
       const { getContacts } = await import('@/lib/supabase/contacts')
@@ -100,19 +101,26 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   useEffect(() => {
     // Load messages
     const loadMessagesData = async () => {
-      // Tutorial bot uses its own message system
-      if (isTutorialBot) {
+      // Tutorial and Support bots use local storage only
+      if (isTutorialBot || isSupportBot) {
         try {
           const saved = localStorage.getItem(storageKey)
           if (saved) {
             setMessages(JSON.parse(saved))
-          } else {
+          } else if (isTutorialBot) {
             setMessages(mockMessages[user.id] || [])
+          } else if (isSupportBot) {
+            // Initial support message if nothing saved
+            const { createSupportConversation } = await import('@/lib/bot-data')
+            const conv = createSupportConversation()
+            if (conv.lastMessage) {
+              setMessages([conv.lastMessage])
+            }
           }
         } catch {
-          setMessages(mockMessages[user.id] || [])
+          if (isTutorialBot) setMessages(mockMessages[user.id] || [])
         }
-        handleConversationOpened()
+        if (isTutorialBot) handleConversationOpened()
         return
       }
 
@@ -158,9 +166,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, currentUserData?.id])
 
-  // Realtime: escutar novas mensagens sem fazer polling (reduz drasticamente o Egress)
+  // Realtime: escutar novas mensagens sem fazer polling
   useEffect(() => {
-    if (isTutorialBot || !currentUserData?.id) return
+    if (isTutorialBot || isSupportBot || !currentUserData?.id) return
 
     let channel: any = null
 
@@ -360,6 +368,54 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   }
 
   const handleSend = async (content: string, expiresIn?: number, type: 'text' | 'image' | 'request' = 'text', metadata?: any) => {
+    // Support Bot Logic
+    if (user.id === 'bot-support') {
+      const userMsg: Message = {
+        id: `msg-${Date.now()}`,
+        content,
+        senderId: 'current-user',
+        receiverId: user.id,
+        timestamp: new Date(),
+        isRead: true,
+        isRevealed: true,
+        type: 'text',
+      }
+      setMessages((prev) => [...prev, userMsg])
+
+      // Bot reply logic
+      setTimeout(async () => {
+        setIsTyping(true)
+        await new Promise(r => setTimeout(r, 1500))
+        setIsTyping(false)
+
+        let reply = "Desculpe, não entendi. Você pode perguntar sobre 'Tokens', 'Segurança' ou 'Pix'."
+        const low = content.toLowerCase()
+
+        if (low.includes('token') || low.includes('dinheiro') || low.includes('₮')) {
+          reply = "Os Tokens (₮) são nossa moeda. Você ganha vendendo conteúdo ou recarregando com o administrador. 1 Token = 1 Real."
+        } else if (low.includes('seguran') || low.includes('privacidade') || low.includes('hacker')) {
+          reply = "Nossa rede é 100% efêmera. Mensagens deletadas somem dos servidores para sempre. Além disso, seu saldo é blindado via SQL."
+        } else if (low.includes('pix') || low.includes('saque') || low.includes('pagar') || low.includes('mínimo') || low.includes('minimo')) {
+          reply = "Para sacar, vá em Carteira > Sacar. O valor mínimo para saque é de ₮ 100 (R$ 100,00). O pagamento é feito via PIX em até 24h úteis pela nossa diretoria."
+        } else if (low.includes('contato') || low.includes('adicionar')) {
+          reply = "Para falar com alguém, use a aba 'Desvobrir' ou clique no '+' na lista de chats e digite o @nickname da pessoa."
+        }
+
+        const botMsg: Message = {
+          id: `msg-${Date.now() + 1}`,
+          content: reply,
+          senderId: user.id,
+          receiverId: 'current-user',
+          timestamp: new Date(),
+          isRead: false,
+          isRevealed: true,
+          type: 'text',
+        }
+        setMessages((prev) => [...prev, botMsg])
+      }, 500)
+      return
+    }
+
     // Tutorial bot: keep local behavior
     if (isTutorialBot || !currentUserData?.id) {
       const newMessage: Message = {
@@ -535,8 +591,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     )
 
     // Notify tutorial if this is the tutorial bot
-    if (isTutorialBot) {
-      handleMessageRevealed(messageId)
+    if (isTutorialBot || isSupportBot) {
+      if (isTutorialBot) handleMessageRevealed(messageId)
       return
     }
 
@@ -788,6 +844,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
               isOwn={message.senderId === 'current-user' || (currentUserData?.id ? message.senderId === currentUserData.id : false)}
               onReveal={handleReveal}
               onExpire={handleExpire}
+              onDelete={handleExpire} // Reuso handleExpire que já deleta do Supabase
               viewerNickname={currentUserData?.nickname || currentUser.nickname}
               onAcceptRequest={handleAcceptRequest}
               onRejectRequest={handleRejectRequest}

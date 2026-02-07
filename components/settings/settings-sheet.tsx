@@ -18,12 +18,15 @@ import {
   Download,
   Mail,
   Shield,
+  ShieldCheck,
+  Activity,
   Bell,
   Lock,
   Ban,
   Monitor,
   CreditCard,
   MessageSquare,
+  MessageCircle,
   UserCheck,
   DollarSign,
   EyeOff
@@ -326,12 +329,88 @@ export function SettingsSheet({
         {activeSubView === 'help' && (
           <SubViewContainer title="Ajuda e Suporte" onBack={() => setActiveSubView(null)}>
             <SectionLabel>Canais de Atendimento</SectionLabel>
-            <SettingItem icon={MessageSquare} label="Chat de Suporte" value="Resposta em até 24h" onClick={() => toast.info('Iniciando chat de suporte...')} />
+            <SettingItem
+              icon={MessageSquare}
+              label="Chat de Suporte"
+              value="IA de Suporte Fantasma"
+              iconColor="text-emerald-400"
+              onClick={() => {
+                const event = new CustomEvent('open-support-chat')
+                window.dispatchEvent(event)
+                onClose()
+              }}
+            />
             <SettingItem icon={Mail} label="E-mail de Suporte" value="ajuda@phantomchat.com" onClick={() => window.open('mailto:ajuda@phantomchat.com')} iconColor="text-blue-400" />
 
             <SectionLabel>FAQ</SectionLabel>
-            <SettingItem icon={Info} label="Como funcionam os tokens?" />
-            <SettingItem icon={Shield} label="Segurança do Álbum" />
+            <SettingItem icon={Info} label="Como funcionam os tokens?" onClick={() => setActiveSubView('how-tokens-work')} />
+            <SettingItem icon={Shield} label="Segurança da Rede" onClick={() => setActiveSubView('network-security')} />
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'how-tokens-work' && (
+          <SubViewContainer title="Tokens" onBack={() => setActiveSubView('help')}>
+            <div className="p-6 space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20">
+                <h3 className="text-primary font-black uppercase text-xs tracking-widest mb-2 flex items-center gap-2">
+                  <Wallet className="w-4 h-4" /> Ecossistema Phantom
+                </h3>
+                <p className="text-zinc-400 text-sm leading-relaxed">
+                  Os <span className="text-white font-bold">Tokens (₮)</span> são a moeda oficial da rede. Com eles você pode:
+                </p>
+                <ul className="mt-4 space-y-3">
+                  <li className="flex gap-3 text-sm text-zinc-300">
+                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] shrink-0 font-bold">1</div>
+                    Desbloquear fotos e vídeos privados de outros usuários.
+                  </li>
+                  <li className="flex gap-3 text-sm text-zinc-300">
+                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] shrink-0 font-bold">2</div>
+                    Vender seu próprio conteúdo e acumular saldo para saque.
+                  </li>
+                  <li className="flex gap-3 text-sm text-zinc-300">
+                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] shrink-0 font-bold">3</div>
+                    Verificar a autenticidade de usuários premium.
+                  </li>
+                </ul>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 text-center">Taxas e Saques</p>
+                <p className="text-xs text-zinc-400 text-center italic">
+                  A plataforma retém 20% das transações. O saque mínimo é de 50 ₮ via PIX.
+                </p>
+              </div>
+            </div>
+          </SubViewContainer>
+        )}
+
+        {activeSubView === 'network-security' && (
+          <SubViewContainer title="Segurança" onBack={() => setActiveSubView('help')}>
+            <div className="p-6 space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+                <h4 className="text-white font-bold text-sm mb-1 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-primary" /> Criptografia Efêmera
+                </h4>
+                <p className="text-zinc-500 text-xs">
+                  Todas as mensagens e mídias são deletadas permanentemente após a expiração. Nada fica guardado nos servidores.
+                </p>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+                <h4 className="text-white font-bold text-sm mb-1 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" /> Proteção de Saldo
+                </h4>
+                <p className="text-zinc-500 text-xs">
+                  Seu wallet_balance é protegido por triggers SQL que impedem qualquer alteração externa não autorizada.
+                </p>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+                <h4 className="text-white font-bold text-sm mb-1 flex items-center gap-2">
+                  <Monitor className="w-4 h-4 text-blue-500" /> Segurança Interna
+                </h4>
+                <p className="text-zinc-500 text-xs">
+                  O painel administrativo utiliza autenticação multinível e hardware keys para gestão da rede.
+                </p>
+              </div>
+            </div>
           </SubViewContainer>
         )}
 

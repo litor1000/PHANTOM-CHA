@@ -229,14 +229,27 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
     }
 
     const handleWithdrawFunds = async () => {
+        const { authenticate } = await import('@/lib/biometrics')
+
+        // 1. Solicitar Valor
         const amountStr = prompt('Quanto de saldo (₮) deseja sacar?')
         if (!amountStr) return
 
         const amount = parseFloat(amountStr.replace(',', '.'))
         if (isNaN(amount) || amount <= 0) return alert('Valor inválido')
+        if (amount < 100) return alert('O valor mínimo para saque é de ₮ 100 (R$ 100,00)')
         if (amount > balance) return alert('Saldo insuficiente')
 
+        // 2. Autenticação Biométrica obrigatória para saques
         try {
+            const isAuthorized = await authenticate('Confirme sua identidade para realizar o saque de tokens.')
+
+            if (!isAuthorized) {
+                alert('Falha na autenticação. O saque foi cancelado por segurança.')
+                return
+            }
+
+            // 3. Processar Saque
             const { getSupabaseClient } = await import('@/lib/supabase/client')
             const supabase = getSupabaseClient()
             if (!supabase) return
@@ -253,7 +266,7 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
             }
         } catch (error) {
             console.error('Erro ao sacar:', error)
-            alert('Erro inesperado')
+            alert('Erro inesperado na autenticação biométrica')
         }
     }
 

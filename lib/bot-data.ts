@@ -73,3 +73,32 @@ export function createTutorialConversation(): Conversation {
   }
 }
 
+export const SUPPORT_BOT_ID = 'bot-support'
+
+export const SUPPORT_BOT: User = {
+  id: SUPPORT_BOT_ID,
+  name: 'Suporte Fantasma',
+  nickname: 'suporte',
+  email: 'suporte@phantom.chat',
+  phone: '',
+  avatar: '🛡️',
+  isOnline: true,
+}
+
+export function createSupportConversation(): Conversation {
+  return {
+    id: `conv-${SUPPORT_BOT_ID}`,
+    user: SUPPORT_BOT,
+    lastMessage: {
+      id: 'support-initial',
+      content: '🤖 Olá! Eu sou o assistente virtual do Phantom Chat.\n\nComo posso te ajudar hoje? Você pode perguntar sobre Tokens, Segurança ou como usar o app.',
+      senderId: SUPPORT_BOT_ID,
+      receiverId: 'current-user',
+      timestamp: new Date(),
+      isRead: false,
+      isRevealed: true,
+      type: 'text'
+    },
+    unreadCount: 1,
+  }
+}
