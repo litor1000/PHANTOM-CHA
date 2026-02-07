@@ -201,10 +201,13 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             event: '*',
             schema: 'public',
             table: 'messages',
-            filter: `sender_id=eq.${user.id},receiver_id=eq.${currentUserData.id}`
+            filter: `receiver_id=eq.${currentUserData.id}` // Escutar tudo que chega para MIM
           },
           async (payload: any) => {
-            console.log('⚡ Realtime Event (from them):', payload.eventType, payload.new?.id)
+            console.log('⚡ Realtime Event (Incoming):', payload.eventType, payload.new?.id)
+
+            // Filtrar apenas se for desta conversa
+            if (payload.new && payload.new.sender_id !== user.id) return
 
             if (payload.eventType === 'INSERT') {
               const msg = payload.new
