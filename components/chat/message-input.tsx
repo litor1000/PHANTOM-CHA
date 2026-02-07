@@ -77,7 +77,7 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
     setMessage('')
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
-      inputRef.current.focus()
+      inputRef.current.focus({ preventScroll: true })
     }
   }
 
@@ -91,7 +91,7 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
   const handleEmojiSelect = (emoji: string) => {
     setMessage((prev) => prev + emoji)
     setTimeout(adjustHeight, 0)
-    inputRef.current?.focus()
+    inputRef.current?.focus({ preventScroll: true })
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,6 +256,7 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               placeholder="Mensagem secreta..."
+              enterKeyHint="send"
               rows={1}
               className={cn(
                 'w-full resize-none rounded-2xl bg-secondary px-4 py-3.5',
