@@ -436,7 +436,7 @@ export function MessageBubble({
               <div className="space-y-1">
                 <p
                   className={cn(
-                    'text-base leading-relaxed transition-all duration-300 whitespace-pre-wrap',
+                    'text-lg leading-relaxed transition-all duration-300 whitespace-pre-wrap',
                     (showBlur || showLock) && 'blur-lg select-none'
                   )}
                 >
@@ -482,10 +482,10 @@ export function MessageBubble({
 
             <button
               onClick={(e) => { e.stopPropagation(); if (confirm('Excluir esta mensagem?')) onDelete?.(message.id) }}
-              className="p-1 hover:bg-black/20 rounded-md text-muted-foreground hover:text-red-500 transition-colors"
+              className="p-1.5 hover:bg-black/20 rounded-md text-muted-foreground hover:text-red-500 transition-colors ml-2"
               title="Excluir mensagem"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-4 w-4" />
             </button>
 
             {isOwn && (
