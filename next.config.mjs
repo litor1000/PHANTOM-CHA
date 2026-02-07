@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // output: 'export', // Removido para permitir rotas de API (IA, Pagamentos)
   typescript: {
     ignoreBuildErrors: true,
   },
