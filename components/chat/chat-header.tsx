@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   user: UserType
   onBack: () => void
   onViewProfile: () => void
+  children?: React.ReactNode
 }
 
 function getInitials(name: string): string {
@@ -50,7 +51,7 @@ function formatLastSeen(date?: Date | string): string {
   return 'ha muito tempo'
 }
 
-export function ChatHeader({ user, onBack, onViewProfile }: ChatHeaderProps) {
+export function ChatHeader({ user, onBack, onViewProfile, children }: ChatHeaderProps) {
   const [isMuted, setIsMuted] = useState(false)
   const [isBlocked, setIsBlocked] = useState(false)
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'active' | 'inactive'>('loading')
@@ -120,6 +121,8 @@ export function ChatHeader({ user, onBack, onViewProfile }: ChatHeaderProps) {
           </p>
         </div>
       </button>
+
+      {children}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

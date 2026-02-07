@@ -12,6 +12,16 @@ import { useTutorial } from '@/hooks/use-tutorial'
 import { TUTORIAL_BOT_ID } from '@/lib/bot-data'
 import { sendMessage, loadMessages, revealMessage, deleteMessage, markMessagesAsRead } from '@/lib/supabase/messages'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Ticket, Info } from 'lucide-react'
 
 interface ChatViewProps {
   user: User
@@ -35,6 +45,10 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const storageKey = `phantom-messages-${user.id}`
   const isTutorialBot = user.id === TUTORIAL_BOT_ID
   const isSupportBot = user.id === 'bot-support'
+  /* Ticket State */
+  const [isTicketOpen, setIsTicketOpen] = useState(false)
+  const [ticketDescription, setTicketDescription] = useState('')
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false)
 
   const {
     getTutorialMessages,
@@ -820,6 +834,50 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     }
   }
 
+  const handleCreateTicket = async () => {
+    if (!currentUserData?.id) return
+
+    setIsCreatingTicket(true)
+    try {
+      const { getSupabaseClient } = await import('@/lib/supabase/client')
+      const supabase = getSupabaseClient()
+      if (!supabase) throw new Error("Supabase não inicializado")
+
+      const subject = ticketDescription.trim() || 'Solicitação de Suporte via Chat'
+
+      const { error } = await (supabase.from('support_tickets') as any).insert({
+        user_id: currentUserData.id,
+        subject: subject,
+        status: 'open',
+        priority: 'medium'
+      })
+
+      if (error) throw error
+
+      alert('Chamado criado com sucesso! Um atendente humano responderá em breve.')
+      setIsTicketOpen(false)
+      setTicketDescription('')
+
+      const confirmMsg: Message = {
+        id: `sys-${Date.now()}`,
+        content: '🎫 Chamado de suporte criado com sucesso. Aguarde atendimento.',
+        senderId: 'system',
+        receiverId: currentUserData.id,
+        timestamp: new Date(),
+        isRead: false,
+        isRevealed: true,
+        type: 'text'
+      }
+      setMessages(prev => [...prev, confirmMsg])
+
+    } catch (error: any) {
+      console.error('Erro ao criar ticket:', error)
+      alert('Erro ao criar chamado: ' + error.message)
+    } finally {
+      setIsCreatingTicket(false)
+    }
+  }
+
   const handlePurchasePhoto = async (photoId: string, price: number): Promise<boolean> => {
     const { getSupabaseClient } = await import('@/lib/supabase/client')
     const supabase = getSupabaseClient()
@@ -862,7 +920,19 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         user={user}
         onBack={onBack}
         onViewProfile={() => setShowProfile(true)}
-      />
+      >
+        {isSupportBot && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsTicketOpen(true)}
+            className="text-primary hover:text-primary hover:bg-primary/10"
+            title="Abrir Chamado"
+          >
+            <Ticket className="w-5 h-5" />
+          </Button>
+        )}
+      </ChatHeader>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" ref={scrollRef}
@@ -957,6 +1027,34 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         onRequestPhoto={handleRequestPhoto}
         onPurchasePhoto={handlePurchasePhoto}
       />
+
+      <Dialog open={isTicketOpen} onOpenChange={setIsTicketOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Falar com Atendente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Descreva seu problema para que nossa equipe humana possa ajudar.
+            </p>
+            <div className="space-y-2">
+              <Label>Assunto / Problema</Label>
+              <textarea
+                className="w-full min-h-[100px] p-3 rounded-md bg-secondary text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Ex: Fiz um pix e não caiu..."
+                value={ticketDescription}
+                onChange={(e) => setTicketDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsTicketOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateTicket} disabled={isCreatingTicket}>
+              {isCreatingTicket ? 'Criando...' : 'Abrir Chamado'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
