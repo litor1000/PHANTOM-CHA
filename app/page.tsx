@@ -55,7 +55,18 @@ export default function Home() {
       if (supabaseUser) {
         setUser(supabaseUser)
         // Sync to localStorage to avoid flicker next time
-        localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
+        try {
+          localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
+        } catch (e) {
+          console.warn('Quota exceeded for phantom-user, trying to clear old messages...')
+          // Se estourar o quota, tentamos limpar mensagens antigas de outros chats
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('phantom-messages-') && !key.includes(supabaseUser.id)) {
+              localStorage.removeItem(key)
+            }
+          })
+          try { localStorage.setItem('phantom-user', JSON.stringify(supabaseUser)) } catch { }
+        }
 
         if (Capacitor.isNativePlatform()) setIsLocked(true)
         // Load user-specific contacts
@@ -127,7 +138,9 @@ export default function Home() {
         localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
         setContacts([TUTORIAL_BOT])
         // Tutorial bot contacts will be loaded per user later
-        localStorage.setItem('phantom-onboarded', '1')
+        try {
+          localStorage.setItem('phantom-onboarded', '1')
+        } catch { }
       }
 
       setIsLoading(false)
