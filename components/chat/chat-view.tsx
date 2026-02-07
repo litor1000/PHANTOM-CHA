@@ -400,6 +400,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             })
           })
 
+          if (!response.ok) throw new Error('Falha na API')
+
           const data = await response.json()
 
           if (data.text) {
@@ -417,6 +419,17 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           }
         } catch (error) {
           console.error('Erro ao falar com a IA:', error)
+          const errorMsg: Message = {
+            id: `msg-error-${Date.now()}`,
+            content: "⚠️ Estou com uma instabilidade momentânea. Por favor, verifique se a chave da IA está configurada no servidor (Vercel).",
+            senderId: user.id,
+            receiverId: 'current-user',
+            timestamp: new Date(),
+            isRead: false,
+            isRevealed: true,
+            type: 'text',
+          }
+          setMessages((prev) => [...prev, errorMsg])
         } finally {
           setIsTyping(false)
         }
