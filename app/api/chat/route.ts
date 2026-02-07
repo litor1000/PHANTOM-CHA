@@ -7,7 +7,7 @@ export async function POST(req: Request) {
 
         const { messages } = await req.json();
 
-        // Limpeza absoluta das mensagens
+        // Limpeza das mensagens
         const cleanMessages = messages
             .filter((m: any) => m.content && String(m.content).trim() !== '')
             .map((m: any) => ({
@@ -15,10 +15,10 @@ export async function POST(req: Request) {
                 content: String(m.content).trim()
             }));
 
-        const systemPrompt = "Você é o Assistente Virtual Oficial do Phantom Chat. 1 Token (₮) = R$ 1,00. Saque mínimo ₮ 100 via PIX (24h úteis). Rede efêmera. Responda em Português de forma curta.";
+        const systemPrompt = "Você é o Assistente Virtual Oficial do Phantom Chat. 1 Token (₮) = R$ 1,00. Saque mínimo ₮ 100 via PIX (24h úteis). Rede efêmera e privada. Responda em Português de forma curta e direta.";
 
         const payload = {
-            model: "llama3-8b-8192",
+            model: "llama-3.1-8b-instant", // Modelo atualizado e ativo
             messages: [
                 { role: "system", content: systemPrompt },
                 ...cleanMessages
@@ -40,8 +40,7 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
             console.error('Erro Groq API:', data);
-            const errorMsg = data.error?.message || JSON.stringify(data);
-            throw new Error(`Status ${response.status}: ${errorMsg}`);
+            throw new Error(data.error?.message || 'Erro na comunicação');
         }
 
         return Response.json({
@@ -49,11 +48,10 @@ export async function POST(req: Request) {
         });
 
     } catch (error: any) {
-        console.error('Erro Final Chat:', error);
+        console.error('Erro Chat:', error);
 
-        // Retornando erro técnico para diagnóstico
         return Response.json({
-            text: `🤖 Olá! Erro ao conectar com a IA (Erro: ${error.message}). Mas posso ajudar: 1 Token = R$1,00, saque mínimo ₮100 via PIX. Em que posso ajudar?`
+            text: `🤖 Olá! Estamos com um ajuste técnico (${error.message}). Mas posso informar: 1 Token = R$1,00, saque mínimo ₮100 via PIX!`
         });
     }
 }
