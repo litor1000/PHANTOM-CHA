@@ -1,5 +1,10 @@
-import { google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateText } from 'ai';
+
+// Configuração robusta do provedor Google
+const googleProvider = createGoogleGenerativeAI({
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || '',
+});
 
 // Personalidade e regras do Phantom Chat
 const systemPrompt = `
@@ -25,33 +30,34 @@ Responda sempre em Português do Brasil. Responda de forma direta e curta, como 
 
 export async function POST(req: Request) {
     try {
-        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        const rawApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
-        if (!apiKey) {
+        if (!rawApiKey) {
             return Response.json({
-                error: 'Chave de API (GOOGLE_GENERATIVE_AI_API_KEY) não encontrada no servidor.'
+                error: 'Chave de API não configurada. Adicione GOOGLE_GENERATIVE_AI_API_KEY no Vercel.'
             }, { status: 401 });
         }
 
         const { messages } = await req.json();
 
         const { text } = await generateText({
-            model: google('gemini-1.5-flash'),
+            model: googleProvider('gemini-1.5-flash'),
             system: systemPrompt,
             messages,
         });
 
         return Response.json({ text });
     } catch (error: any) {
-        console.error('Erro detalhado na API de Chat:', error);
+        console.error('Erro na API de Chat:', error);
 
-        // Tenta extrair a mensagem de erro real do Google
-        const errorMessage = error.message || 'Erro desconhecido na IA';
-        const statusCode = error.status || 500;
+        // Fallback para erros conhecidos do Google
+        let message = 'Erro interno na IA';
+        if (error.message?.includes('API key not valid')) message = 'Chave de API Inválida';
+        if (error.status === 429) message = 'Limite de mensagens excedido (Quota)';
 
         return Response.json({
-            error: `Erro na IA: ${errorMessage}`,
-            details: error.data || null
-        }, { status: statusCode });
+            error: message,
+            details: error.message
+        }, { status: error.status || 500 });
     }
 }
