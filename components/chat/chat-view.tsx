@@ -368,7 +368,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   }
 
   const handleSend = async (content: string, expiresIn?: number, type: 'text' | 'image' | 'request' = 'text', metadata?: any) => {
-    // Support Bot Logic
+    // Support Bot Logic (IA Real com Gemini)
     if (user.id === 'bot-support') {
       const userMsg: Message = {
         id: `msg-${Date.now()}`,
@@ -382,36 +382,44 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       }
       setMessages((prev) => [...prev, userMsg])
 
-      // Bot reply logic
+      // Chamar API da IA Real
       setTimeout(async () => {
         setIsTyping(true)
-        await new Promise(r => setTimeout(r, 1500))
-        setIsTyping(false)
+        try {
+          // Pegar as últimas 5 mensagens para dar contexto à IA
+          const conversationHistory = messages.slice(-5).map(m => ({
+            role: m.senderId === 'current-user' ? 'user' : 'assistant',
+            content: m.content
+          }))
 
-        let reply = "Desculpe, não entendi. Você pode perguntar sobre 'Tokens', 'Segurança' ou 'Pix'."
-        const low = content.toLowerCase()
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [...conversationHistory, { role: 'user', content }]
+            })
+          })
 
-        if (low.includes('token') || low.includes('dinheiro') || low.includes('₮')) {
-          reply = "Os Tokens (₮) são nossa moeda. Você ganha vendendo conteúdo ou recarregando com o administrador. 1 Token = 1 Real."
-        } else if (low.includes('seguran') || low.includes('privacidade') || low.includes('hacker')) {
-          reply = "Nossa rede é 100% efêmera. Mensagens deletadas somem dos servidores para sempre. Além disso, seu saldo é blindado via SQL."
-        } else if (low.includes('pix') || low.includes('saque') || low.includes('pagar') || low.includes('mínimo') || low.includes('minimo')) {
-          reply = "Para sacar, vá em Carteira > Sacar. O valor mínimo para saque é de ₮ 100 (R$ 100,00). O pagamento é feito via PIX em até 24h úteis pela nossa diretoria."
-        } else if (low.includes('contato') || low.includes('adicionar')) {
-          reply = "Para falar com alguém, use a aba 'Desvobrir' ou clique no '+' na lista de chats e digite o @nickname da pessoa."
+          const data = await response.json()
+
+          if (data.text) {
+            const botMsg: Message = {
+              id: `msg-${Date.now() + 1}`,
+              content: data.text,
+              senderId: user.id,
+              receiverId: 'current-user',
+              timestamp: new Date(),
+              isRead: false,
+              isRevealed: true,
+              type: 'text',
+            }
+            setMessages((prev) => [...prev, botMsg])
+          }
+        } catch (error) {
+          console.error('Erro ao falar com a IA:', error)
+        } finally {
+          setIsTyping(false)
         }
-
-        const botMsg: Message = {
-          id: `msg-${Date.now() + 1}`,
-          content: reply,
-          senderId: user.id,
-          receiverId: 'current-user',
-          timestamp: new Date(),
-          isRead: false,
-          isRevealed: true,
-          type: 'text',
-        }
-        setMessages((prev) => [...prev, botMsg])
       }, 500)
       return
     }

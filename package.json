@@ -14,6 +14,7 @@
     "ios": "npm run static && npm run cap:sync && npm run cap:open:ios"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.22",
     "@capacitor/android": "^8.0.2",
     "@capacitor/app": "^8.0.0",
     "@capacitor/browser": "^8.0.0",
@@ -56,6 +57,7 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/supabase-js": "^2.93.2",
     "@vercel/analytics": "1.3.1",
+    "ai": "^6.0.75",
     "autoprefixer": "^10.4.20",
     "capacitor-native-biometric": "^4.2.2",
     "class-variance-authority": "^0.7.1",
