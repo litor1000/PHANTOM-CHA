@@ -343,7 +343,13 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             }
         })
 
-        return { data: Array.from(conversationsMap.values()), error: null }
+        // Filtrar conversas que não têm mensagens ativas
+        // Se todas as mensagens expiraram, a conversa não deve aparecer
+        const conversationsWithMessages = Array.from(conversationsMap.values()).filter(conv => {
+            return conv.lastMessage && conv.lastMessage.content
+        })
+
+        return { data: conversationsWithMessages, error: null }
 
     } catch (error) {
         console.error('Erro ao buscar conversas:', error)
