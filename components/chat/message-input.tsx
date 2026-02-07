@@ -184,17 +184,17 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
 
   return (
     <>
-      <div className="flex items-end gap-2 px-3 py-3 bg-card border-t border-border">
+      <div className="flex items-end gap-2 px-4 py-4 md:py-5 bg-card border-t border-border">
         <div className="relative">
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 h-9 w-9 text-primary cursor-default hover:bg-transparent"
+            className="shrink-0 h-10 w-10 md:h-11 md:w-11 text-primary cursor-default hover:bg-transparent"
             aria-label="Tempo de expiração fixo"
             title="Mensagens expiram em 10s"
           >
-            <Clock className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+            <Clock className="h-6 w-6" />
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
               5s
             </span>
           </Button>
@@ -205,10 +205,10 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
             variant="ghost"
             size="icon"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9"
+            className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 md:h-11 md:w-11"
             aria-label="Adicionar emoji"
           >
-            <Smile className="h-5 w-5" />
+            <Smile className="h-6 w-6" />
           </Button>
           <EmojiPicker
             isOpen={showEmojiPicker}
@@ -221,10 +221,10 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
           variant="ghost"
           size="icon"
           onClick={() => photoInputRef.current?.click()}
-          className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9"
+          className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 md:h-11 md:w-11"
           aria-label="Enviar foto"
         >
-          <Camera className="h-5 w-5" />
+          <Camera className="h-6 w-6" />
         </Button>
         <input
           ref={photoInputRef}
@@ -258,14 +258,14 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
               placeholder="Mensagem secreta..."
               rows={1}
               className={cn(
-                'w-full resize-none rounded-2xl bg-secondary px-4 py-2.5',
-                'text-sm text-foreground placeholder:text-muted-foreground/60',
+                'w-full resize-none rounded-2xl bg-secondary px-4 py-3.5',
+                'text-base text-foreground placeholder:text-muted-foreground/60',
                 'focus:outline-none focus:ring-2 focus:ring-primary/50',
                 'max-h-32 overflow-y-auto'
               )}
               style={{
                 height: 'auto',
-                minHeight: '42px',
+                minHeight: '48px',
               }}
             />
           </div>
@@ -276,21 +276,21 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
             size="icon"
             onClick={isRecording ? () => stopRecording() : handleSend}
             className={cn(
-              "shrink-0 rounded-full h-9 w-9 transition-all duration-300",
+              "shrink-0 rounded-full h-10 w-10 md:h-11 md:w-11 transition-all duration-300",
               isRecording ? "bg-red-500 hover:bg-red-600 animate-bounce" : "bg-primary hover:bg-primary/90"
             )}
             aria-label={isRecording ? "Parar gravação" : "Enviar mensagem"}
           >
-            {isRecording ? <Mic className="h-4 w-4 text-white" /> : <Send className="h-4 w-4 text-primary-foreground" />}
+            {isRecording ? <Mic className="h-5 w-5 text-white" /> : <Send className="h-5 w-5 text-primary-foreground" />}
           </Button>
         ) : (
           <Button
             size="icon"
             onClick={startRecording}
-            className="shrink-0 bg-secondary hover:bg-secondary/80 text-muted-foreground rounded-full h-9 w-9"
+            className="shrink-0 bg-secondary hover:bg-secondary/80 text-muted-foreground rounded-full h-10 w-10 md:h-11 md:w-11"
             aria-label="Gravar áudio"
           >
-            <Mic className="h-4 w-4" />
+            <Mic className="h-5 w-5" />
           </Button>
         )}
       </div>
