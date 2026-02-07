@@ -7,7 +7,7 @@ export async function POST(req: Request) {
 
         const { messages } = await req.json();
 
-        // Limpeza absoluta das mensagens para o formato exato que a Groq exige
+        // Limpeza absoluta das mensagens
         const cleanMessages = messages
             .filter((m: any) => m.content && String(m.content).trim() !== '')
             .map((m: any) => ({
@@ -15,7 +15,6 @@ export async function POST(req: Request) {
                 content: String(m.content).trim()
             }));
 
-        // Injeção do sistema como primeira mensagem para máxima compatibilidade
         const systemPrompt = "Você é o Assistente Virtual Oficial do Phantom Chat. 1 Token (₮) = R$ 1,00. Saque mínimo ₮ 100 via PIX (24h úteis). Rede efêmera. Responda em Português de forma curta.";
 
         const payload = {
@@ -28,7 +27,6 @@ export async function POST(req: Request) {
             max_tokens: 500
         };
 
-        // Chamada manual via Fetch para evitar campos extras de bibliotecas
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -42,7 +40,8 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
             console.error('Erro Groq API:', data);
-            throw new Error(data.error?.message || 'Erro na comunicação com a Groq');
+            const errorMsg = data.error?.message || JSON.stringify(data);
+            throw new Error(`Status ${response.status}: ${errorMsg}`);
         }
 
         return Response.json({
@@ -52,9 +51,9 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error('Erro Final Chat:', error);
 
-        // Fallback amigável com as regras de negócio
+        // Retornando erro técnico para diagnóstico
         return Response.json({
-            text: "🤖 Olá! Estamos finalizando a calibragem do nosso suporte. Mas já posso ajudar: 1 Token vale R$1,00, o saque mínimo é ₮100 via PIX e todas as mensagens são efêmeras! Em que posso ajudar?"
+            text: `🤖 Olá! Erro ao conectar com a IA (Erro: ${error.message}). Mas posso ajudar: 1 Token = R$1,00, saque mínimo ₮100 via PIX. Em que posso ajudar?`
         });
     }
 }
