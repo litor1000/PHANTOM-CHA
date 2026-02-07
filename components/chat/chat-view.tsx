@@ -178,54 +178,48 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       if (!supabase) return
 
       // Inscrever para mudanças na tabela de mensagens
+      // Usando dois filtros para garantir que pegamos todas as mensagens relevantes
       channel = supabase
         .channel(`chat:${user.id}`)
         .on(
           'postgres_changes',
           {
-            event: '*', // Escutar INSERSÃO, UPDATE e DELETE
+            event: '*',
             schema: 'public',
             table: 'messages',
-            filter: `sender_id=in.(${currentUserData.id},${user.id})`
+            filter: `sender_id=eq.${user.id},receiver_id=eq.${currentUserData.id}`
           },
           async (payload: any) => {
-            console.log('⚡ Realtime Event:', payload.eventType, payload.new?.id)
+            console.log('⚡ Realtime Event (from them):', payload.eventType, payload.new?.id)
 
             if (payload.eventType === 'INSERT') {
-              // Nova mensagem chegando!
               const msg = payload.new
-              const isFromMe = msg.sender_id === currentUserData.id
-              const isRelevant = msg.sender_id === user.id || msg.receiver_id === user.id
-
-              if (isRelevant) {
-                const newMessage = {
-                  id: msg.id,
-                  content: msg.content,
-                  senderId: msg.sender_id,
-                  receiverId: msg.receiver_id,
-                  timestamp: new Date(msg.created_at),
-                  isRead: msg.is_read,
-                  isRevealed: isFromMe ? true : msg.is_revealed,
-                  type: msg.type,
-                  imageUrl: msg.image_url,
-                  allowedNicknames: msg.allowed_nicknames,
-                  expiresIn: msg.expires_in,
-                  expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-                  metadata: msg.metadata,
-                }
-
-                setMessages(prev => {
-                  // Evitar duplicatas
-                  if (prev.find(m => m.id === newMessage.id)) return prev
-                  return [...prev, newMessage]
-                })
-
-                if (msg.sender_id === user.id) {
-                  markMessagesAsRead(currentUserData.id, user.id)
-                }
+              const newMessage = {
+                id: msg.id,
+                content: msg.content,
+                senderId: msg.sender_id,
+                receiverId: msg.receiver_id,
+                timestamp: new Date(msg.created_at),
+                isRead: msg.is_read,
+                isRevealed: msg.is_revealed,
+                type: msg.type,
+                imageUrl: msg.image_url,
+                videoUrl: msg.video_url,
+                audioUrl: msg.audio_url,
+                allowedNicknames: msg.allowed_nicknames,
+                expiresIn: msg.expires_in,
+                expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+                metadata: msg.metadata,
               }
+
+              setMessages(prev => {
+                if (prev.find(m => m.id === newMessage.id)) return prev
+                return [...prev, newMessage]
+              })
+
+              // Marcar como lida automaticamente
+              markMessagesAsRead(currentUserData.id, user.id)
             } else if (payload.eventType === 'UPDATE') {
-              // Mensagem foi alterada (ex: revelada ou tempo de expiração definido)
               const msg = payload.new
               setMessages(prev => prev.map(m => m.id === msg.id ? {
                 ...m,
@@ -235,7 +229,53 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 metadata: msg.metadata
               } : m))
             } else if (payload.eventType === 'DELETE') {
-              // Mensagem expirou e foi deletada do banco!
+              setMessages(prev => prev.filter(m => m.id !== payload.old.id))
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            filter: `sender_id=eq.${currentUserData.id},receiver_id=eq.${user.id}`
+          },
+          async (payload: any) => {
+            console.log('⚡ Realtime Event (from me):', payload.eventType, payload.new?.id)
+
+            if (payload.eventType === 'INSERT') {
+              const msg = payload.new
+              const newMessage = {
+                id: msg.id,
+                content: msg.content,
+                senderId: msg.sender_id,
+                receiverId: msg.receiver_id,
+                timestamp: new Date(msg.created_at),
+                isRead: msg.is_read,
+                isRevealed: true, // Minhas mensagens sempre reveladas
+                type: msg.type,
+                imageUrl: msg.image_url,
+                videoUrl: msg.video_url,
+                audioUrl: msg.audio_url,
+                allowedNicknames: msg.allowed_nicknames,
+                expiresIn: msg.expires_in,
+                expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
+                metadata: msg.metadata,
+              }
+
+              setMessages(prev => {
+                if (prev.find(m => m.id === newMessage.id)) return prev
+                return [...prev, newMessage]
+              })
+            } else if (payload.eventType === 'UPDATE') {
+              const msg = payload.new
+              setMessages(prev => prev.map(m => m.id === msg.id ? {
+                ...m,
+                isRead: msg.is_read,
+                metadata: msg.metadata
+              } : m))
+            } else if (payload.eventType === 'DELETE') {
               setMessages(prev => prev.filter(m => m.id !== payload.old.id))
             }
           }
