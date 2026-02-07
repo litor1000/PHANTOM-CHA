@@ -18,7 +18,8 @@ const config: CapacitorConfig = {
         },
     },
     server: {
-        androidScheme: 'https'
+        url: 'https://phantom-cha.vercel.app/',
+        cleartext: true
     }
 };
 

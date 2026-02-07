@@ -28,7 +28,7 @@ interface ConversationListProps {
   onUpdateUser: (user: CurrentUser) => void
   onLogout: () => void
   contacts?: UserType[]
-  onAddContact?: (nickname: string) => void
+  onAddContact?: (nickname: string) => Promise<boolean | void> | void
   onCreateGroup?: (name: string, members: string[]) => void
   onAcceptInvite?: (groupId: string) => void
   onRejectInvite?: (groupId: string) => void
@@ -137,15 +137,34 @@ export function ConversationList({
     }
   }
 
-  const handleAddContact = (user: UserType) => {
+  const handleAddContact = async (user: UserType) => {
     if (onAddContact) {
-      onAddContact(user.nickname)
-      setNewContactNickname('')
-      setSearchResults([])
-      toast({
-        title: "Contato adicionado",
-        description: `O usuário @${user.nickname} foi adicionado aos seus contatos.`,
-      })
+      try {
+        // @ts-ignore - onAddContact pode ser async
+        const success = await onAddContact(user.nickname)
+
+        if (success !== false) { // Se retornar true ou void (assumimos sucesso se não for explicitamente false)
+          setNewContactNickname('')
+          setSearchResults([])
+          toast({
+            title: "Contato adicionado",
+            description: `O usuário @${user.nickname} foi adicionado aos seus contatos.`,
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Erro ao adicionar",
+            description: "Não foi possível adicionar o contato. Tente novamente.",
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao adicionar contato:', error)
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: "Ocorreu um erro ao processar sua solicitação.",
+        })
+      }
     }
   }
 
