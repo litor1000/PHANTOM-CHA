@@ -400,7 +400,14 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             })
           })
 
-          const data = await response.json()
+          let data;
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            data = await response.json();
+          } else {
+            const errorText = await response.text();
+            throw new Error(`Servidor respondeu com erro (${response.status}): ${errorText.substring(0, 50)}`);
+          }
 
           if (!response.ok) {
             throw new Error(data.error || 'Falha na comunicação com a IA')
