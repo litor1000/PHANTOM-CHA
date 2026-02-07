@@ -1,5 +1,11 @@
-import { google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateText } from 'ai';
+
+// Configuração forçando a versão v1 da API para evitar erro de 'model not found' na v1beta
+const googleProvider = createGoogleGenerativeAI({
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || '',
+    baseURL: 'https://generativelanguage.googleapis.com/v1',
+});
 
 // Personalidade e regras do Phantom Chat
 const systemPrompt = `
@@ -33,9 +39,9 @@ export async function POST(req: Request) {
 
         const { messages } = await req.json();
 
-        // Usando gemini-1.5-flash-latest para maior compatibilidade
+        // Usando gemini-1.5-flash na v1 da API
         const { text } = await generateText({
-            model: google('gemini-1.5-flash-latest'),
+            model: googleProvider('gemini-1.5-flash'),
             system: systemPrompt,
             messages,
         });
@@ -44,20 +50,9 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error('ERRO GEMINI:', error);
 
-        // Tentar fallback para gemini-pro se o flash falhar
-        try {
-            const { messages } = await req.json();
-            const { text } = await generateText({
-                model: google('gemini-1.5-pro'),
-                system: systemPrompt,
-                messages,
-            });
-            return Response.json({ text });
-        } catch (fallbackError: any) {
-            return Response.json({
-                error: error.message || 'Erro na API do Google',
-                status: error.status
-            }, { status: error.status || 500 });
-        }
+        return Response.json({
+            error: `Erro na IA (${error.status || '500'}): ${error.message || 'Erro Interno'}`,
+            details: error.message
+        }, { status: error.status || 500 });
     }
 }
