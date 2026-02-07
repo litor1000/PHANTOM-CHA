@@ -1,30 +1,50 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 
-const google = createGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || '',
+// Configuração do provedor Groq usando a biblioteca OpenAI compatível
+const groq = createOpenAI({
+    baseURL: 'https://api.groq.com/openai/v1',
+    apiKey: process.env.GROQ_API_KEY?.trim() || '',
 });
+
+// Prompt Mestre com as regras do Phantom Chat
+const systemPrompt = `
+Você é o Assistente Virtual Oficial do Phantom Chat, uma rede de mensagens ultra-privada, efêmera e segura.
+Seu tom de voz é profissional, elegante e mantém um leve ar de mistério ("Phantom Style").
+
+REGRAS:
+1. TOKENS (₮): 1 Token = R$ 1,00.
+2. SAQUE MÍNIMO: ₮ 100 via PIX (processado em até 24h úteis).
+3. PRIVACIDADE: Rede 100% efêmera. Mensagens somem após lidas.
+4. SEGURANÇA: Saques exigem confirmação biométrica.
+
+Responda sempre em Português do Brasil, de forma muito curta e direta.
+`;
 
 export async function POST(req: Request) {
     try {
-        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-        if (!apiKey) return Response.json({ error: 'Chave ausente' }, { status: 401 });
+        const apiKey = process.env.GROQ_API_KEY;
+
+        if (!apiKey) {
+            return Response.json({ error: 'Chave de API do Groq ausente no Vercel.' }, { status: 401 });
+        }
 
         const { messages } = await req.json();
 
-        const rulesPrompt = `Você é o Assistente do Phantom Chat. 1 Token (₮) = R$ 1,00. Saque mínimo ₮ 100. Rede efêmera.`;
-
+        // Usando o modelo Llama 3 8b do Groq pela sua velocidade e qualidade
         const { text } = await generateText({
-            model: google('gemini-1.5-flash'),
-            system: rulesPrompt,
-            messages: messages,
+            model: groq('llama3-8b-8192'),
+            system: systemPrompt,
+            messages,
         });
 
         return Response.json({ text });
     } catch (error: any) {
-        console.error('ERRO:', error);
+        console.error('Erro na API Groq:', error);
+
+        // Fallback amigável
         return Response.json({
-            text: `🤖 Olá! Estamos com uma oscilação (Erro: ${error.message}). Informações: 1 Token = R$1,00, Saque mínimo ₮100.`
+            text: "🤖 Olá! Estou atualizando meus sistemas. Lembre-se: 1 Token vale R$ 1,00, saque mínimo ₮ 100 e nossa rede é 100% privada!"
         });
     }
 }
