@@ -179,9 +179,9 @@ export function ConversationList({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="relative w-9 h-9 rounded-full bg-card overflow-hidden border-2 border-primary/20 shrink-0">
-              {currentUser.profilePhoto ? (
+              {(currentUser.profilePhoto || currentUser.avatar) ? (
                 <Image
-                  src={currentUser.profilePhoto || "/placeholder.svg"}
+                  src={currentUser.profilePhoto || currentUser.avatar || "/placeholder.svg"}
                   alt={currentUser.name}
                   fill
                   className="object-cover"
