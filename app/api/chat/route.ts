@@ -1,10 +1,13 @@
-import OpenAI from 'openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateText } from 'ai';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+// Configuração forçando a versão v1 (estável) da API do Google
+const google = createGoogleGenerativeAI({
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || '',
+    baseURL: 'https://generativelanguage.googleapis.com/v1',
 });
 
-// Personalidade e regras do Phantom Chat
+// Prompt Mestre com todas as regras do Phantom Chat
 const systemPrompt = `
 Você é o Assistente Virtual Oficial do Phantom Chat, uma rede de mensagens ultra-privada, efêmera e segura. 
 Seu tom de voz é profissional, elegante e mantém um leve ar de mistério ("Phantom Style"). 
@@ -23,36 +26,33 @@ ESTILO DE RESPOSTA:
 - Seja prestativo, mas mantenha o mistério.
 - Use o símbolo ₮ sempre para tokens.
 - Responda de forma curta, como em um chat de celular.
-- Nunca invente regras fora destas citadas.
+- Se o usuário perguntar algo fora destas regras, peça para ele aguardar um humano da diretoria.
 `;
 
 export async function POST(req: Request) {
     try {
-        if (!process.env.OPENAI_API_KEY) {
-            return Response.json({ error: 'Configuração da OpenAI ausente (OPENAI_API_KEY) no Vercel.' }, { status: 401 });
+        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+        if (!apiKey) {
+            return Response.json({ error: 'Chave de API do Google ausente no Vercel.' }, { status: 401 });
         }
 
         const { messages } = await req.json();
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo', // Escolhi o 3.5 turbo por ser estável e rápido para chat de suporte
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages
-            ],
-            temperature: 0.7,
-            max_tokens: 500,
+        // Usando o modelo gemini-1.5-flash na rede estável v1
+        const { text } = await generateText({
+            model: google('gemini-1.5-flash'),
+            system: systemPrompt,
+            messages,
         });
 
-        return Response.json({
-            text: response.choices[0].message.content
-        });
+        return Response.json({ text });
     } catch (error: any) {
-        console.error('Erro na API OpenAI:', error);
+        console.error('Erro na API Gemini:', error);
 
+        // Fallback amigável caso o Google dê erro de cota ou região
         return Response.json({
-            error: `Erro no ChatGPT: ${error.message || 'Erro Interno'}`,
-            status: error.status
-        }, { status: error.status || 500 });
+            text: "🤖 Olá! Estamos com uma oscilação na nossa rede neural. Mas para adiantar: 1 Token vale R$1,00, o saque mínimo é ₮100 e nossa rede é 100% efêmera! Como posso ajudar?"
+        });
     }
 }
