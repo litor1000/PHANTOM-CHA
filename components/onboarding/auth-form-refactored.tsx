@@ -601,10 +601,29 @@ export function AuthForm({ onComplete, onBack }: AuthFormProps) {
 
           {step === 3 && (
             <button
-              onClick={() => onComplete(formData)}
+              onClick={async () => {
+                setLoading(true)
+                const { error } = await signUp({
+                  email: formData.email,
+                  password: formData.password,
+                  name: formData.name,
+                  nickname: formData.nickname,
+                  phone: formData.phone,
+                })
+                setLoading(false)
+
+                if (error) {
+                  toast.error(error)
+                  return
+                }
+
+                toast.success('Conta criada com sucesso!')
+                onComplete(formData)
+              }}
+              disabled={loading}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              Pular por agora
+              {loading ? 'Criando conta...' : 'Pular foto e finalizar'}
             </button>
           )}
         </div>
