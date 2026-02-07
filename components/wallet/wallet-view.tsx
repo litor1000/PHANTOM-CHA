@@ -106,6 +106,12 @@ export function WalletView({ isOpen, onClose, currentUser }: WalletViewProps) {
     }, [])
 
     const handleBuyPackage = async (pkg: TokenPackage) => {
+        // Validação de segurança: Impedir compras de usuários não registrados
+        if (currentUser.id === 'current-user' || !currentUser.id.includes('-')) {
+            alert('Para realizar compras, seu cadastro precisa estar sincronizado com o servidor. Por favor, verifique sua conexão ou complete seu perfil.')
+            return
+        }
+
         try {
             setIsCreatingPayment(true)
 
