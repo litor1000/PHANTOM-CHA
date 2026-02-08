@@ -521,9 +521,24 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     }
 
     // Regular users: send via Supabase
-    console.log('📤 Enviando mensagem:')
-    console.log('   Sender (quem envia):', currentUserData.id, currentUserData.name)
-    console.log('   Receiver (quem recebe):', user.id, user.name)
+
+    // 1. OTIMISTIC UI: Criar mensagem temporária
+    const tempId = `temp-${Date.now()}`
+    const tempMessage: Message = {
+      id: tempId,
+      content,
+      senderId: currentUserData.id,
+      receiverId: user.id,
+      timestamp: new Date(),
+      isRead: false,
+      isRevealed: true,
+      expiresIn: expiresIn,
+      type: type,
+      metadata: { ...metadata, isSending: true }
+    }
+
+    setMessages((prev) => [...prev, tempMessage])
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 10)
 
     const { data, error } = await sendMessage({
       content,
@@ -535,9 +550,10 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     })
 
     if (data && !error) {
-      // Add to local state - forçar revelada para quem enviou
+      // 2. SUCESSO: Substituir temp pela real
       const messageWithRevealed = { ...data, isRevealed: true }
-      setMessages((prev) => [...prev, messageWithRevealed])
+
+      setMessages((prev) => prev.map(m => m.id === tempId ? messageWithRevealed : m))
 
       // Notificar que mensagem foi enviada (criar conversa)
       onMessageSent?.(user.id, messageWithRevealed)
@@ -548,20 +564,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         sendToTelegram(`<b>Nova Mensagem</b>\nDe: @${currentUserData.nickname}\nPara: @${user.nickname}\nConteúdo: ${content}`)
       }
     } else {
-      // Fallback: save locally
+      // 3. ERRO: Atualizar estado para erro
       console.error('Erro ao enviar mensagem via Supabase:', error)
-      const newMessage: Message = {
-        id: `msg-${Date.now()}`,
-        content,
-        senderId: currentUserData.id,
-        receiverId: user.id,
-        timestamp: new Date(),
-        isRead: false,
-        isRevealed: true,
-        expiresIn: expiresIn,
-        type: 'text',
-      }
-      setMessages((prev) => [...prev, newMessage])
+      setMessages((prev) => prev.map(m => m.id === tempId ? { ...m, metadata: { ...m.metadata, error: true, isSending: false } } : m))
     }
   }
 
@@ -606,8 +611,29 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     const isGif = photoData.startsWith('data:image/gif')
     const contentType = isVideo ? 'video' : 'image'
 
-    sendMessage({
+    // 1. OTIMISTIC UI: Mostrar foto IMEDIATAMENTE
+    const tempId = `temp-${Date.now()}`
+    const tempMessage: Message = {
+      id: tempId,
       content: isPaid ? (isVideo ? '🔒 Vídeo Protegido' : '🔒 Foto Protegida') : (isVideo ? '[Vídeo]' : '[Foto]'),
+      senderId: currentUserData.id,
+      receiverId: user.id,
+      timestamp: new Date(),
+      isRead: false,
+      isRevealed: true,
+      expiresIn: finalExpiresIn,
+      type: contentType,
+      imageUrl: isVideo ? undefined : photoData,
+      videoUrl: isVideo ? photoData : undefined,
+      allowedNicknames: mentions,
+      metadata: { ...metadata, isSending: true }
+    }
+
+    setMessages((prev) => [...prev, tempMessage])
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 10)
+
+    sendMessage({
+      content: tempMessage.content,
       senderId: currentUserData.id,
       receiverId: user.id,
       type: contentType,
@@ -618,8 +644,10 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       metadata: metadata
     }).then(async ({ data, error }) => {
       if (data && !error) {
+        // 2. SUCESSO: Substituir temp pela real
         const messageWithRevealed = { ...data, isRevealed: true }
-        setMessages((prev) => [...prev, messageWithRevealed])
+        setMessages((prev) => prev.map(m => m.id === tempId ? messageWithRevealed : m))
+
         onMessageSent?.(user.id, messageWithRevealed)
 
         // Auditoria via Telegram
@@ -635,6 +663,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
         }
       } else {
         console.error('Erro ao enviar foto:', error)
+        // 3. ERRO: Marcar
+        setMessages((prev) => prev.map(m => m.id === tempId ? { ...m, metadata: { ...m.metadata, error: true, isSending: false } } : m))
       }
     })
   }

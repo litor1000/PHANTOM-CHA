@@ -55,6 +55,9 @@ export interface Message {
     price?: number
     isLocked?: boolean
     paymentStatus?: 'pending' | 'paid'
+    // UI states
+    isSending?: boolean
+    error?: boolean
   }
 }
 
