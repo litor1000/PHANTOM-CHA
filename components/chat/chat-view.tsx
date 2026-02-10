@@ -191,8 +191,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       const supabase = getSupabaseClient()
       if (!supabase) return
 
-      // Inscrever para mudanças na tabela de mensagens
-      // Usando dois filtros para garantir que pegamos todas as mensagens relevantes
+      console.log('📡 Configurando Realtime para:', user.nickname)
+
+      // Canal único para todas as mudanças na tabela de mensagens
       channel = supabase
         .channel(`chat:${user.id}`)
         .on(
@@ -200,17 +201,24 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           {
             event: '*',
             schema: 'public',
-            table: 'messages',
-            filter: `receiver_id=eq.${currentUserData.id}` // Escutar tudo que chega para MIM
+            table: 'messages'
           },
           async (payload: any) => {
-            console.log('⚡ Realtime Event (Incoming):', payload.eventType, payload.new?.id)
+            console.log('⚡ Realtime Event:', payload.eventType, payload.new?.id || payload.old?.id)
 
-            // Filtrar apenas se for desta conversa
-            if (payload.new && payload.new.sender_id !== user.id) return
+            const msg = payload.new || payload.old
+            if (!msg) return
+
+            // Verificar se esta mensagem pertence a ESTA conversa
+            const isFromMe = msg.sender_id === currentUserData.id && msg.receiver_id === user.id
+            const isToMe = msg.receiver_id === currentUserData.id && msg.sender_id === user.id
+
+            if (!isFromMe && !isToMe) {
+              console.log('⏭️ Ignorando mensagem de outra conversa')
+              return
+            }
 
             if (payload.eventType === 'INSERT') {
-              const msg = payload.new
               const newMessage = {
                 id: msg.id,
                 content: msg.content,
@@ -218,7 +226,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 receiverId: msg.receiver_id,
                 timestamp: new Date(msg.created_at),
                 isRead: msg.is_read,
-                isRevealed: msg.is_revealed,
+                isRevealed: isFromMe ? true : msg.is_revealed, // Minhas sempre reveladas
                 type: msg.type,
                 imageUrl: msg.image_url,
                 videoUrl: msg.video_url,
@@ -230,14 +238,27 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
               }
 
               setMessages(prev => {
+                // Se já existe (ex: via otimista), não duplicar, mas atualizar com os dados reais
                 if (prev.find(m => m.id === newMessage.id)) return prev
-                return [...prev, newMessage]
-              })
 
-              // Marcar como lida automaticamente
-              markMessagesAsRead(currentUserData.id, user.id)
+                // Se for uma mensagem que enviamos, ela pode estar lá com ID temporário
+                // No entanto, o sendMessage cuidará da substituição pelo ID temporário.
+                // Aqui apenas adicionamos se for nova (ex: mensagem vinda do outro usuário)
+                if (isToMe) {
+                  console.log('📩 Nova mensagem recebida!')
+                  // Marcar como lida automaticamente se estiver na tela
+                  markMessagesAsRead(currentUserData.id, user.id)
+                  return [...prev, newMessage]
+                }
+
+                // Se for minha e não estiver no estado (ex: enviado de outro dispositivo)
+                if (isFromMe && !prev.some(m => m.id === newMessage.id)) {
+                  return [...prev, newMessage]
+                }
+
+                return prev
+              })
             } else if (payload.eventType === 'UPDATE') {
-              const msg = payload.new
               setMessages(prev => prev.map(m => m.id === msg.id ? {
                 ...m,
                 isRevealed: msg.is_revealed,
@@ -250,54 +271,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             }
           }
         )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'messages',
-            filter: `sender_id=eq.${currentUserData.id},receiver_id=eq.${user.id}`
-          },
-          async (payload: any) => {
-            console.log('⚡ Realtime Event (from me):', payload.eventType, payload.new?.id)
-
-            if (payload.eventType === 'INSERT') {
-              const msg = payload.new
-              const newMessage = {
-                id: msg.id,
-                content: msg.content,
-                senderId: msg.sender_id,
-                receiverId: msg.receiver_id,
-                timestamp: new Date(msg.created_at),
-                isRead: msg.is_read,
-                isRevealed: true, // Minhas mensagens sempre reveladas
-                type: msg.type,
-                imageUrl: msg.image_url,
-                videoUrl: msg.video_url,
-                audioUrl: msg.audio_url,
-                allowedNicknames: msg.allowed_nicknames,
-                expiresIn: msg.expires_in,
-                expiresAt: msg.expires_at ? new Date(msg.expires_at) : undefined,
-                metadata: msg.metadata,
-              }
-
-              setMessages(prev => {
-                if (prev.find(m => m.id === newMessage.id)) return prev
-                return [...prev, newMessage]
-              })
-            } else if (payload.eventType === 'UPDATE') {
-              const msg = payload.new
-              setMessages(prev => prev.map(m => m.id === msg.id ? {
-                ...m,
-                isRead: msg.is_read,
-                metadata: msg.metadata
-              } : m))
-            } else if (payload.eventType === 'DELETE') {
-              setMessages(prev => prev.filter(m => m.id !== payload.old.id))
-            }
-          }
-        )
-        .subscribe()
+        .subscribe((status: string) => {
+          console.log(`🔌 Status do Realtime (${user.nickname}):`, status)
+        })
     }
 
     setupRealtime()
@@ -540,12 +516,14 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     setMessages((prev) => [...prev, tempMessage])
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 10)
 
+    const finalExpiresIn = expiresIn !== undefined ? expiresIn : 10
+
     const { data, error } = await sendMessage({
       content,
       senderId: currentUserData.id,
       receiverId: user.id,
       type: type,
-      expiresIn: expiresIn || 10,
+      expiresIn: finalExpiresIn,
       metadata: metadata
     })
 

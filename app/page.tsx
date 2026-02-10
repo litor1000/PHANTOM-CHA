@@ -237,6 +237,8 @@ export default function Home() {
       const supabase = getSupabaseClient()
       if (!supabase) return
 
+      console.log('📡 Configurando Realtime Global para lista de conversas')
+
       channel = supabase
         .channel('public:messages_changes')
         .on(
@@ -244,21 +246,12 @@ export default function Home() {
           {
             event: '*',
             schema: 'public',
-            table: 'messages',
-            // Escutamos mensagens onde o usuário atual é remetente ou destinatário
-            filter: `sender_id=eq.${user.id}`
+            table: 'messages'
           },
-          () => fetchConversations()
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'messages',
-            filter: `receiver_id=eq.${user.id}`
-          },
-          () => fetchConversations()
+          () => {
+            console.log('⚡ Mudança detectada nas mensagens, atualizando conversas...')
+            fetchConversations()
+          }
         )
         .subscribe()
     }

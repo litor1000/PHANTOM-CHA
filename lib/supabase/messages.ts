@@ -94,13 +94,12 @@ export async function loadMessages(
         const { data, error } = await (supabase
             .from('messages') as any)
             .select('*')
-            // Mensagens onde (sender=EU ou receiver=EU) E (sender=OUTRO ou receiver=OUTRO)
-            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-            .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-            // Filtro de segurança: não trazer o que já expirou no servidor
+            // Mensagens onde (sender=EU AND receiver=OUTRO) OU (sender=OUTRO AND receiver=EU)
+            .or(`and(sender_id.eq.${userId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${userId})`)
+            // Filtro de segurança: não trazer o que já expirou no banco
             .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
             .order('created_at', { ascending: false })
-            .limit(50) // LIMITAR para não dar Timeout
+            .limit(50)
 
         if (error) {
             console.error('Erro ao carregar mensagens (Load):', JSON.stringify(error, null, 2))
