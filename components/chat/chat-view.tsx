@@ -22,8 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Ticket, Info, Trophy, DollarSign } from 'lucide-react'
-import confetti from 'canvas-confetti'
+import { Ticket, Info, Trophy, DollarSign, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { blockUser, unblockUser, isUserBlocked } from '@/lib/supabase/blocking'
 
@@ -53,6 +52,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const [ticketDescription, setTicketDescription] = useState('')
   const [isCreatingTicket, setIsCreatingTicket] = useState(false)
   const [isBlocked, setIsBlocked] = useState(false)
+  const [earnedCoinAmount, setEarnedCoinAmount] = useState<number | null>(null) // Novo estado para animação de moedas
 
   const {
     getTutorialMessages,
@@ -318,14 +318,20 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 if (oldMsg && !oldMsg.isRevealed && msg.is_revealed &&
                   msg.sender_id === currentUserData.id &&
                   (msg.metadata?.price > 0 || msg.metadata?.paymentStatus === 'paid')) {
-                  const end = Date.now() + 3000
-                  const frame = () => {
-                    confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#f59e0b', '#ffffff', '#10b981'] })
-                    confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#f59e0b', '#ffffff', '#10b981'] })
-                    if (Date.now() < end) requestAnimationFrame(frame)
-                  }
-                  frame()
-                  toast.success(`Venda Confirmada! +₮${msg.metadata?.price || 0}`, { icon: <DollarSign className="w-5 h-5 text-green-500" /> })
+
+                  // EFEITO DE MOEDA DOURADA (GANHO)
+                  const price = msg.metadata?.price || 0
+                  setEarnedCoinAmount(price)
+
+                  // Limpar animação após alguns segundos
+                  setTimeout(() => {
+                    setEarnedCoinAmount(null)
+                  }, 4500)
+
+                  toast.success(`Venda Confirmada! +₮${price}`, {
+                    icon: <DollarSign className="w-5 h-5 text-amber-500 animate-bounce" />,
+                    style: { backgroundColor: 'oklch(0.2 0.05 40)', borderColor: 'oklch(0.7 0.2 40)' }
+                  })
                 }
                 return prev.map(m => m.id === msg.id ? {
                   ...m,
@@ -1158,6 +1164,40 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Animação de Moeda Dourada (Earned Reward) */}
+      {earnedCoinAmount !== null && (
+        <div className="fixed inset-0 pointer-events-none z-[200] flex items-center justify-center overflow-hidden">
+          <div className="absolute inset-0 bg-amber-500/5 backdrop-blur-[2px] animate-in fade-in duration-500" />
+
+          <div className="relative flex flex-col items-center animate-coin-float">
+            {/* Partículas de Brilho */}
+            <Sparkles className="absolute -top-12 -left-12 w-8 h-8 text-amber-300 animate-pulse" />
+            <Sparkles className="absolute -bottom-8 -right-10 w-6 h-6 text-amber-200 animate-bounce" />
+            <Sparkles className="absolute top-0 right-16 w-10 h-10 text-amber-400 animate-pulse delay-700" />
+
+            {/* A Moeda Gigante */}
+            <div className="w-40 h-40 bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-200 rounded-full border-[6px] border-amber-500/80 shadow-[0_0_80px_rgba(245,158,11,0.6)] flex items-center justify-center animate-coin-rotate gold-glow">
+              <span className="text-8xl font-black text-amber-900/80 drop-shadow-2xl select-none">₮</span>
+            </div>
+
+            {/* Texto de Valor */}
+            <div className="mt-8 flex flex-col items-center animate-in slide-in-from-bottom-6 duration-1000">
+              <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 to-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.8)]">
+                + {earnedCoinAmount}
+              </span>
+              <span className="text-xl font-bold text-amber-500 uppercase tracking-[0.2em] animate-pulse">
+                Tokens Recebidos
+              </span>
+            </div>
+          </div>
+
+          {/* Som visual */}
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-amber-500/40 font-black text-6xl italic uppercase animate-ping opacity-20">
+            Ka-Ching!
+          </div>
+        </div>
+      )}
     </div>
   )
 }

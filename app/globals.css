@@ -146,4 +146,38 @@
   .pb-safe {
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
+
+  .animate-coin-float {
+    animation: coin-float 3s ease-in-out infinite;
+  }
+
+  .animate-coin-rotate {
+    animation: coin-rotate 2s linear infinite;
+  }
+
+  @keyframes coin-float {
+
+    0%,
+    100% {
+      transform: translateY(0) scale(1);
+    }
+
+    50% {
+      transform: translateY(-30px) scale(1.1);
+    }
+  }
+
+  @keyframes coin-rotate {
+    0% {
+      transform: rotateY(0deg);
+    }
+
+    100% {
+      transform: rotateY(360deg);
+    }
+  }
+
+  .gold-glow {
+    filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.6));
+  }
 }
