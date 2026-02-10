@@ -194,7 +194,7 @@ export function ConversationList({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header with Profile */}
-      <header className="px-3 py-2 border-b border-border">
+      <header className="px-3 py-2 border-b border-border safe-top">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="relative w-9 h-9 rounded-full bg-card overflow-hidden border-2 border-primary/20 shrink-0">

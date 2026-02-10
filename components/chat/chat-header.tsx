@@ -85,7 +85,7 @@ export function ChatHeader({ user, onBack, onViewProfile, children }: ChatHeader
   }
 
   return (
-    <header className="flex items-center gap-2 px-2 py-2 bg-card border-b border-border">
+    <header className="flex items-center gap-2 px-2 py-2 bg-card border-b border-border safe-top">
       <Button
         variant="ghost"
         size="icon"
