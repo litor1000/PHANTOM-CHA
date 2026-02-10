@@ -30,20 +30,38 @@ export async function sendMessage(message: {
         const msgId = `msg-${Date.now()}`
 
         // Se for Base64, fazer upload para Storage primeiro
-        // Isso evita que o Realtime falhe por payload muito grande (limite de 1MB)
+        // Isso evita que o Realtime faile por payload muito grande (limite de 1MB)
         if (message.imageUrl?.startsWith('data:image')) {
+            console.log('📤 [Messages] Detectada imagem Base64, enviando para Storage...')
             const uploadRes = await uploadChatImage(message.senderId, message.imageUrl, msgId)
-            if (uploadRes) finalImageUrl = uploadRes.url
+            if (uploadRes) {
+                console.log('🔗 [Messages] Upload sucesso! URL:', uploadRes.url)
+                finalImageUrl = uploadRes.url
+            } else {
+                console.warn('⚠️ [Messages] Falha no upload Storage, enviando Base64 para o banco (pode falhar/truncar)')
+            }
         }
 
         if (message.videoUrl?.startsWith('data:video')) {
+            console.log('📤 [Messages] Detectado vídeo Base64, enviando para Storage...')
             const uploadRes = await uploadChatVideo(message.senderId, message.videoUrl, msgId)
-            if (uploadRes) finalVideoUrl = uploadRes.url
+            if (uploadRes) {
+                console.log('🔗 [Messages] Upload sucesso! URL:', uploadRes.url)
+                finalVideoUrl = uploadRes.url
+            } else {
+                console.warn('⚠️ [Messages] Falha no upload Storage, enviando Base64 para o banco (pode falhar/truncar)')
+            }
         }
 
         if (message.audioUrl?.startsWith('data:audio')) {
+            console.log('📤 [Messages] Detectado áudio Base64, enviando para Storage...')
             const uploadRes = await uploadChatAudio(message.senderId, message.audioUrl, msgId)
-            if (uploadRes) finalAudioUrl = uploadRes.url
+            if (uploadRes) {
+                console.log('🔗 [Messages] Upload sucesso! URL:', uploadRes.url)
+                finalAudioUrl = uploadRes.url
+            } else {
+                console.warn('⚠️ [Messages] Falha no upload Storage, enviando Base64 para o banco (pode falhar/truncar)')
+            }
         }
 
         const messageData = {

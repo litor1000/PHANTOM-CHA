@@ -445,10 +445,10 @@ export function MessageBubble({
                           <img
                             src={message.imageUrl}
                             alt="Blur Preview"
-                            className="w-full h-full object-cover blur-[40px] scale-125 opacity-70 brightness-[0.4] transition-all duration-1000 group-hover:scale-110 group-hover:brightness-[0.5]"
+                            className="w-full h-full object-cover blur-[25px] scale-125 opacity-40 brightness-[1.1] transition-all duration-1000 group-hover:scale-110 group-hover:brightness-[1.2]"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-transparent to-amber-500/10" />
-                          <div className="absolute inset-0 backdrop-blur-xl" />
+                          <div className="absolute inset-0 bg-white/10 backdrop-blur-md" />
+                          <div className="absolute inset-0 bg-gradient-to-tr from-black/20 via-transparent to-white/5" />
                         </div>
                       )}
 
@@ -537,13 +537,13 @@ export function MessageBubble({
             )}
 
             {showBlur && !showLock && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[15px] z-10">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/20 backdrop-blur-[30px] z-10 border border-white/10">
                 <div className="flex flex-col items-center gap-2 text-primary">
                   <div className="relative group-hover:scale-110 transition-transform duration-500">
                     <Sparkles className="h-8 w-8 animate-pulse text-primary fill-primary/20" />
-                    <Eye className="h-4 w-4 absolute -bottom-1 -right-1 text-white" />
+                    <Eye className="h-4 w-4 absolute -bottom-1 -right-1 text-white shadow-lg" />
                   </div>
-                  <span className="text-[9px] font-black tracking-[0.3em] uppercase opacity-80 italic">Revelar</span>
+                  <span className="text-[9px] font-black tracking-[0.3em] uppercase text-primary/80 italic drop-shadow-sm">Revelar</span>
                 </div>
               </div>
             )}

@@ -281,7 +281,17 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 if (optimisticIdx !== -1) {
                   console.log('🔄 [Chat] Sincronizando mensagem otimista com UUID real')
                   const newMessages = [...prev]
-                  newMessages[optimisticIdx] = newMessage
+                  const oldMsg = prev[optimisticIdx]
+
+                  // PROTEÇÃO: Se a mensagem real vier sem URL (truncada/delay), mantém a do base64 otimista
+                  const mergedMsg = {
+                    ...newMessage,
+                    imageUrl: newMessage.imageUrl || oldMsg.imageUrl,
+                    videoUrl: newMessage.videoUrl || oldMsg.videoUrl,
+                    audioUrl: newMessage.audioUrl || oldMsg.audioUrl
+                  }
+
+                  newMessages[optimisticIdx] = mergedMsg
                   return newMessages
                 }
 

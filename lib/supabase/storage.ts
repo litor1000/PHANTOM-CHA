@@ -10,28 +10,39 @@ export async function uploadChatImage(
     if (!supabase) {
       return null
     }
-    const base64Data = imageData.split(',')[1]
+    const parts = imageData.split(',')
+    if (parts.length < 2) {
+      console.error('❌ [Storage] Formato de imagem inválido (não é DataURL)')
+      return null
+    }
+    const base64Data = parts[1]
+    const contentType = parts[0].split(':')[1].split(';')[0]
+
+    console.log(`📡 [Storage] Carregando ${contentType} para bucket chat-images...`)
+
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i)
     }
     const byteArray = new Uint8Array(byteNumbers)
-    const blob = new Blob([byteArray], { type: 'image/jpeg' })
+    const blob = new Blob([byteArray], { type: contentType })
 
     const fileName = `${userId}/${messageId}-${Date.now()}.jpg`
 
     const { data, error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, blob, {
-        contentType: 'image/jpeg',
+        contentType: contentType,
         upsert: false,
       })
 
     if (error) {
-      console.error('Erro ao fazer upload da imagem:', error)
+      console.error('❌ [Storage] Erro no upload:', error.message)
       return null
     }
+
+    console.log('✅ [Storage] Upload concluído:', fileName)
 
     const { data: { publicUrl } } = supabase.storage
       .from('chat-images')
@@ -56,27 +67,32 @@ export async function uploadChatVideo(
     const supabase = getSupabaseClient()
     if (!supabase) return null
 
-    // Suporte para data:video/mp4;base64,... ou data:video/webm;base64,...
-    const base64Data = videoData.split(',')[1]
+    const parts = videoData.split(',')
+    if (parts.length < 2) return null
+    const base64Data = parts[1]
+    const contentType = parts[0].split(':')[1].split(';')[0]
+
+    console.log(`📡 [Storage] Carregando vídeo ${contentType}...`)
+
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i)
     }
     const byteArray = new Uint8Array(byteNumbers)
-    const blob = new Blob([byteArray], { type: 'video/mp4' })
+    const blob = new Blob([byteArray], { type: contentType })
 
     const fileName = `${userId}/${messageId}-${Date.now()}.mp4`
 
     const { data, error } = await supabase.storage
-      .from('chat-images') // Reutilizando bucket de mídia
+      .from('chat-images')
       .upload(fileName, blob, {
-        contentType: 'video/mp4',
+        contentType: contentType,
         upsert: false,
       })
 
     if (error) {
-      console.error('Erro ao fazer upload do vídeo:', error)
+      console.error('❌ [Storage] Erro no upload de vídeo:', error.message)
       return null
     }
 
@@ -100,26 +116,32 @@ export async function uploadChatAudio(
     const supabase = getSupabaseClient()
     if (!supabase) return null
 
-    const base64Data = audioData.split(',')[1]
+    const parts = audioData.split(',')
+    if (parts.length < 2) return null
+    const base64Data = parts[1]
+    const contentType = parts[0].split(':')[1].split(';')[0]
+
+    console.log(`📡 [Storage] Carregando áudio ${contentType}...`)
+
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i)
     }
     const byteArray = new Uint8Array(byteNumbers)
-    const blob = new Blob([byteArray], { type: 'audio/webm' })
+    const blob = new Blob([byteArray], { type: contentType })
 
     const fileName = `${userId}/audio-${messageId}-${Date.now()}.webm`
 
     const { data, error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, blob, {
-        contentType: 'audio/webm',
+        contentType: contentType,
         upsert: false,
       })
 
     if (error) {
-      console.error('Erro ao fazer upload do áudio:', error)
+      console.error('❌ [Storage] Erro no upload de áudio:', error.message)
       return null
     }
 
