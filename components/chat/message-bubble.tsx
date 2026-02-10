@@ -57,6 +57,28 @@ export function MessageBubble({
   const [isBuying, setIsBuying] = useState(false)
 
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleLongPress = useCallback(() => {
+    // Feedback tátil se possível
+    if (typeof window !== 'undefined' && 'navigator' in window && (window.navigator as any).vibrate) {
+      window.navigator.vibrate(50)
+    }
+
+    if (confirm('Deseja excluir esta mensagem definitivamente?')) {
+      onDelete?.(message.id)
+    }
+  }, [message.id, onDelete])
+
+  const startPress = useCallback(() => {
+    longPressTimerRef.current = setTimeout(handleLongPress, 700) // 700ms para considerar pressão longa
+  }, [handleLongPress])
+
+  const cancelPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     // Se for conteúdo pago, NÃO inicia contagem de expiração
@@ -230,15 +252,26 @@ export function MessageBubble({
       >
         <div
           className={cn(
-            'relative max-w-[80%] rounded-2xl px-4 py-2 transition-all duration-200',
+            'relative max-w-[80%] rounded-2xl px-4 py-2 transition-all duration-300',
             isOwn
               ? 'bg-message-sent text-foreground rounded-br-md'
               : 'bg-message-received text-foreground rounded-bl-md',
+            showBlur && 'min-h-[150px] min-w-[180px] flex flex-col justify-center shadow-lg border border-primary/20',
             !isOwn && !isRevealed && message.type !== 'request' && !isLocked && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
             isLocked && 'cursor-pointer hover:brightness-110 active:scale-[0.99] border-2 border-amber-500/50 bg-amber-500/10',
             countdown !== null && countdown <= 3 && 'animate-pulse'
           )}
-          onClick={isLocked ? handleRewardReveal : handleReveal}
+          onPointerDown={startPress}
+          onPointerUp={cancelPress}
+          onPointerLeave={cancelPress}
+          onContextMenu={(e) => {
+            e.preventDefault() // Previne menu nativo do Android no long press
+          }}
+          onClick={(e) => {
+            cancelPress()
+            if (isLocked) handleRewardReveal(e)
+            else handleReveal()
+          }}
           role={!isOwn && !isRevealed ? 'button' : undefined}
           tabIndex={!isOwn && !isRevealed ? 0 : undefined}
         >
@@ -459,12 +492,12 @@ export function MessageBubble({
 
             {showBlur && !showLock && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-1.5 text-primary">
+                <div className="flex flex-col items-center gap-2 text-primary">
                   <div className="relative">
-                    <Sparkles className="h-5 w-5 animate-pulse" />
-                    <Eye className="h-3 w-3 absolute -bottom-0.5 -right-0.5" />
+                    <Sparkles className="h-10 w-10 animate-pulse" />
+                    <Eye className="h-5 w-5 absolute -bottom-1 -right-1 bg-background rounded-full p-0.5" />
                   </div>
-                  <span className="text-[10px] font-medium tracking-wide">Clique para ver</span>
+                  <span className="text-xs font-bold tracking-widest uppercase opacity-80">Clique para ver</span>
                 </div>
               </div>
             )}
@@ -472,21 +505,13 @@ export function MessageBubble({
 
           <div
             className={cn(
-              'flex items-center justify-end gap-1 mt-1 transition-all duration-300',
-              showBlur && 'blur-sm opacity-50'
+              'flex items-center justify-end gap-1 mt-auto pt-2 transition-all duration-300',
+              showBlur && 'opacity-30'
             )}
           >
-            <span className="text-[10px] text-muted-foreground mr-1">
+            <span className="text-[10px] text-muted-foreground">
               {formatTime(message.timestamp)}
             </span>
-
-            <button
-              onClick={(e) => { e.stopPropagation(); if (confirm('Excluir esta mensagem?')) onDelete?.(message.id) }}
-              className="p-1.5 hover:bg-black/20 rounded-md text-muted-foreground hover:text-red-500 transition-colors ml-2"
-              title="Excluir mensagem"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
 
             {isOwn && (
               <div className="flex items-center gap-1 ml-1">
