@@ -168,7 +168,8 @@ export function MessageBubble({
   }, [countdown, message.id, onExpire, isPaidContent])
 
   const isLocked = !isOwn && isPaidContent && !isPurchased
-  const showBlur = !isOwn && !isRevealed && message.type !== 'request' && !isLocked
+  // showBlur é apenas para mensagens GRATUITAS que ainda não foram reveladas
+  const showBlur = !isOwn && !isRevealed && message.type !== 'request' && !isPaidContent
   const showLock = isLocked
 
   const handleAccept = async () => {
@@ -409,7 +410,7 @@ export function MessageBubble({
                 )}
                 {message.content && <p className={cn("text-sm transition-all", showBlur && "blur-md")}>{message.content}</p>}
               </div>
-            ) : message.type === 'image' && message.imageUrl ? (
+            ) : (message.type === 'image' || (message.type === 'text' && isPaidContent && message.content.includes('Foto'))) ? (
               (() => {
                 const restricted =
                   !isOwn &&
@@ -417,9 +418,10 @@ export function MessageBubble({
                   message.allowedNicknames.length > 0 &&
                   viewerNickname &&
                   !message.allowedNicknames.includes(viewerNickname.toLowerCase())
+
                 if (restricted) {
                   return (
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground p-4">
                       Imagem visivel apenas para @{message.allowedNicknames?.join(', @') || ''}
                     </div>
                   )
@@ -427,30 +429,32 @@ export function MessageBubble({
 
                 if (showLock) {
                   return (
-                    <div className="flex flex-col items-center justify-center p-4 gap-2 text-center">
-                      <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-1">
+                    <div className="flex flex-col items-center justify-center p-6 gap-3 text-center min-w-[200px] min-h-[180px] bg-amber-500/5 rounded-xl border border-amber-500/20">
+                      <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-1 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
                         {isBuying ? (
-                          <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
                         ) : (
-                          <Lock className="w-6 h-6 text-amber-500" />
+                          <Lock className="w-8 h-8 text-amber-500" />
                         )}
                       </div>
-                      <p className="font-bold text-amber-500">Conteúdo Pago</p>
-                      <p className="text-zinc-400 text-sm">
-                        Desbloqueie essa foto por <br />
-                        <span className="text-2xl font-black text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                          ₮ {price} Tokens
-                        </span>
-                      </p>
-                      <div className="mt-2 bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm">
-                        <ShoppingBag className="w-3 h-3" />
-                        {isBuying ? 'Comprando...' : 'Comprar Agora'}
+                      <div className="space-y-1">
+                        <p className="font-black text-amber-500 uppercase tracking-tighter italic text-xs">Foto Protegida</p>
+                        <p className="text-2xl font-black text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                          ₮ {price}
+                        </p>
                       </div>
+                      <button
+                        onClick={handleRewardReveal}
+                        className="mt-2 bg-amber-500 text-white text-[10px] font-black px-6 py-2 rounded-full flex items-center gap-2 shadow-lg uppercase tracking-widest hover:scale-105 active:scale-95 transition-all"
+                      >
+                        <ShoppingBag className="w-3 h-3" />
+                        {isBuying ? 'Aguarde...' : 'Desbloquear'}
+                      </button>
                     </div>
                   )
                 }
 
-                return (
+                return message.imageUrl ? (
                   <img
                     key={isRevealed ? 'revealed' : 'hidden'}
                     src={message.imageUrl}
@@ -458,11 +462,13 @@ export function MessageBubble({
                     onClick={handleImageClick}
                     className={cn(
                       "max-w-[240px] max-h-[240px] rounded-lg object-cover select-none",
-                      isPaidContent ? "cursor-zoom-in" : "cursor-default"
+                      (isPaidContent || isOwn) ? "cursor-zoom-in" : "cursor-default"
                     )}
                     onContextMenu={(e) => e.preventDefault()}
                     draggable={false}
                   />
+                ) : (
+                  <div className="p-4 text-xs text-muted-foreground italic">Carregando imagem...</div>
                 )
               })()
             ) : (
