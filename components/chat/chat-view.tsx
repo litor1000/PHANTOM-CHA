@@ -21,7 +21,9 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Ticket, Info } from 'lucide-react'
+import { Ticket, Info, Trophy, DollarSign } from 'lucide-react'
+import confetti from 'canvas-confetti'
+import { toast } from 'sonner'
 
 interface ChatViewProps {
   user: User
@@ -259,15 +261,30 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 return prev
               })
             } else if (payload.eventType === 'UPDATE') {
-              setMessages(prev => prev.map(m => m.id === msg.id ? {
-                ...m,
-                isRevealed: msg.is_revealed,
-                isRead: msg.is_read,
-                imageUrl: msg.image_url,
-                videoUrl: msg.video_url,
-                expiresAt: msg.expires_at ? new Date(msg.expires_at) : m.expiresAt,
-                metadata: msg.metadata
-              } : m))
+              setMessages(prev => {
+                const oldMsg = prev.find(m => m.id === msg.id)
+                if (oldMsg && !oldMsg.isRevealed && msg.is_revealed &&
+                  msg.sender_id === currentUserData.id &&
+                  (msg.metadata?.price > 0 || msg.metadata?.paymentStatus === 'paid')) {
+                  const end = Date.now() + 3000
+                  const frame = () => {
+                    confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#f59e0b', '#ffffff', '#10b981'] })
+                    confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#f59e0b', '#ffffff', '#10b981'] })
+                    if (Date.now() < end) requestAnimationFrame(frame)
+                  }
+                  frame()
+                  toast.success(`Venda Confirmada! +₮${msg.metadata?.price || 0}`, { icon: <DollarSign className="w-5 h-5 text-green-500" /> })
+                }
+                return prev.map(m => m.id === msg.id ? {
+                  ...m,
+                  isRevealed: msg.is_revealed,
+                  isRead: msg.is_read,
+                  imageUrl: msg.image_url,
+                  videoUrl: msg.video_url,
+                  expiresAt: msg.expires_at ? new Date(msg.expires_at) : m.expiresAt,
+                  metadata: msg.metadata
+                } : m)
+              })
             } else if (payload.eventType === 'DELETE') {
               setMessages(prev => prev.filter(m => m.id !== payload.old.id))
             }

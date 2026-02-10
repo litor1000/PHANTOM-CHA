@@ -99,7 +99,16 @@ export function MessageBubble({
     if (message.metadata?.status && message.metadata.status !== requestStatus) {
       setRequestStatus(message.metadata.status)
     }
-  }, [message.metadata?.status])
+  }, [message.metadata?.status, requestStatus])
+
+  // Sincronizar estado com Realtime props
+  useEffect(() => {
+    setIsRevealed(message.isRevealed)
+  }, [message.isRevealed])
+
+  useEffect(() => {
+    setIsPurchased(message.metadata?.paymentStatus === 'paid')
+  }, [message.metadata?.paymentStatus])
 
   const handleReveal = useCallback(() => {
     if (isRevealed || isOwn || message.type === 'request') return
@@ -472,20 +481,28 @@ export function MessageBubble({
                 }
 
                 return message.imageUrl ? (
-                  <img
-                    key={isRevealed ? 'revealed' : 'hidden'}
-                    src={message.imageUrl}
-                    alt="Imagem"
-                    onClick={handleImageClick}
-                    className={cn(
-                      "max-w-[240px] max-h-[240px] rounded-lg object-cover select-none",
-                      (isPaidContent || isOwn) ? "cursor-zoom-in" : "cursor-default"
-                    )}
-                    onContextMenu={(e) => e.preventDefault()}
-                    draggable={false}
-                  />
+                  <div className="relative group overflow-hidden rounded-lg bg-zinc-900/50">
+                    <img
+                      key={message.id}
+                      src={message.imageUrl}
+                      alt="Imagem"
+                      onClick={handleImageClick}
+                      className={cn(
+                        "max-w-[240px] max-h-[240px] rounded-lg object-cover select-none transition-all duration-500 opacity-0",
+                        (isPaidContent || isOwn) ? "cursor-zoom-in" : "cursor-default"
+                      )}
+                      onLoad={(e) => {
+                        (e.target as HTMLImageElement).classList.remove('opacity-0')
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                      draggable={false}
+                    />
+                  </div>
                 ) : (
-                  <div className="p-4 text-xs text-muted-foreground italic">Carregando imagem...</div>
+                  <div className="p-8 flex flex-col items-center gap-2 text-muted-foreground bg-zinc-900/30 rounded-lg border border-white/5">
+                    <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    <span className="text-[10px] font-medium tracking-wide uppercase opacity-50">Preparando Mídia...</span>
+                  </div>
                 )
               })()
             ) : (
