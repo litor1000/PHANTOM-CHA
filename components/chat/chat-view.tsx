@@ -263,6 +263,8 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
                 ...m,
                 isRevealed: msg.is_revealed,
                 isRead: msg.is_read,
+                imageUrl: msg.image_url,
+                videoUrl: msg.video_url,
                 expiresAt: msg.expires_at ? new Date(msg.expires_at) : m.expiresAt,
                 metadata: msg.metadata
               } : m))

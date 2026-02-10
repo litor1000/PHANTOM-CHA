@@ -429,27 +429,43 @@ export function MessageBubble({
 
                 if (showLock) {
                   return (
-                    <div className="flex flex-col items-center justify-center p-6 gap-3 text-center min-w-[200px] min-h-[180px] bg-amber-500/5 rounded-xl border border-amber-500/20">
-                      <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-1 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-                        {isBuying ? (
-                          <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Lock className="w-8 h-8 text-amber-500" />
-                        )}
+                    <div className="relative group overflow-hidden rounded-xl bg-zinc-950/40 border border-amber-500/20 shadow-2xl transition-all duration-500 hover:shadow-amber-500/10">
+                      {/* Efeito de Vidro Jateado (Blur Preview) */}
+                      {message.imageUrl && (
+                        <div className="absolute inset-0 z-0">
+                          <img
+                            src={message.imageUrl}
+                            alt="Blur Preview"
+                            className="w-full h-full object-cover blur-[24px] scale-125 opacity-40 brightness-75 transition-all duration-700 group-hover:scale-110 group-hover:opacity-60"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-transparent to-black/40" />
+                        </div>
+                      )}
+
+                      <div className="relative z-10 flex flex-col items-center justify-center p-6 gap-3 text-center min-w-[200px] min-h-[220px]">
+                        <div className="w-16 h-16 rounded-full bg-amber-500/20 backdrop-blur-md flex items-center justify-center mb-1 shadow-[0_0_30px_rgba(245,158,11,0.2)] border border-amber-500/30">
+                          {isBuying ? (
+                            <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Lock className="w-8 h-8 text-amber-500 fill-amber-500/10" />
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-black text-amber-500 uppercase tracking-tighter italic text-[10px] opacity-80">Foto Protegida</p>
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className="text-3xl font-black text-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+                              ₮ {price}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleRewardReveal}
+                          className="mt-2 bg-amber-500 text-white text-[10px] font-black px-8 py-2.5 rounded-full flex items-center gap-2 shadow-2xl uppercase tracking-[0.15em] hover:bg-amber-400 hover:scale-105 active:scale-95 transition-all outline-none"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          {isBuying ? 'Liberando...' : 'Desbloquear'}
+                        </button>
                       </div>
-                      <div className="space-y-1">
-                        <p className="font-black text-amber-500 uppercase tracking-tighter italic text-xs">Foto Protegida</p>
-                        <p className="text-2xl font-black text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                          ₮ {price}
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleRewardReveal}
-                        className="mt-2 bg-amber-500 text-white text-[10px] font-black px-6 py-2 rounded-full flex items-center gap-2 shadow-lg uppercase tracking-widest hover:scale-105 active:scale-95 transition-all"
-                      >
-                        <ShoppingBag className="w-3 h-3" />
-                        {isBuying ? 'Aguarde...' : 'Desbloquear'}
-                      </button>
                     </div>
                   )
                 }
