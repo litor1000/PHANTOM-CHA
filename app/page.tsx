@@ -68,7 +68,7 @@ export default function Home() {
           try { localStorage.setItem('phantom-user', JSON.stringify(supabaseUser)) } catch { }
         }
 
-        if (Capacitor.isNativePlatform()) setIsLocked(true)
+        // if (Capacitor.isNativePlatform()) setIsLocked(true)
         // Load user-specific contacts
         const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
         if (savedContacts) {
@@ -88,7 +88,7 @@ export default function Home() {
           try {
             const parsedUser = JSON.parse(savedUser)
             setUser(parsedUser)
-            if (Capacitor.isNativePlatform()) setIsLocked(true)
+            // if (Capacitor.isNativePlatform()) setIsLocked(true)
             // Load user-specific contacts
             const savedContacts = localStorage.getItem(`phantom-contacts-${parsedUser.id}`)
             if (savedContacts) {
