@@ -15,8 +15,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+import { blockUser, unblockUser, isUserBlocked } from '@/lib/supabase/blocking'
+
 interface ChatHeaderProps {
   user: UserType
+  currentUser?: UserType | null
+  isBlocked: boolean // Novo
+  onToggleBlock: () => Promise<void> // Novo
   onBack: () => void
   onViewProfile: () => void
   children?: React.ReactNode
@@ -51,9 +56,8 @@ function formatLastSeen(date?: Date | string): string {
   return 'ha muito tempo'
 }
 
-export function ChatHeader({ user, onBack, onViewProfile, children }: ChatHeaderProps) {
+export function ChatHeader({ user, currentUser, isBlocked, onToggleBlock, onBack, onViewProfile, children }: ChatHeaderProps) {
   const [isMuted, setIsMuted] = useState(false)
-  const [isBlocked, setIsBlocked] = useState(false)
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'active' | 'inactive'>('loading')
 
   useEffect(() => {
@@ -82,6 +86,10 @@ export function ChatHeader({ user, onBack, onViewProfile, children }: ChatHeader
     await supabase.auth.signOut()
     toast.success('Logout realizado')
     window.location.reload()
+  }
+
+  const handleToggleBlock = async () => {
+    await onToggleBlock()
   }
 
   return (
@@ -162,7 +170,7 @@ export function ChatHeader({ user, onBack, onViewProfile, children }: ChatHeader
             {isMuted ? 'Ativar notificacoes' : 'Silenciar'}
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => setIsBlocked(!isBlocked)}
+            onClick={handleToggleBlock}
             className="gap-2 text-destructive focus:text-destructive"
           >
             <Ban className="w-4 h-4" />

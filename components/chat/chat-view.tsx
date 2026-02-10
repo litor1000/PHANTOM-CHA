@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Ticket, Info, Trophy, DollarSign } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { toast } from 'sonner'
+import { blockUser, unblockUser, isUserBlocked } from '@/lib/supabase/blocking'
 
 interface ChatViewProps {
   user: User
@@ -51,6 +52,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const [isTicketOpen, setIsTicketOpen] = useState(false)
   const [ticketDescription, setTicketDescription] = useState('')
   const [isCreatingTicket, setIsCreatingTicket] = useState(false)
+  const [isBlocked, setIsBlocked] = useState(false)
 
   const {
     getTutorialMessages,
@@ -113,6 +115,32 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     }
     checkContact()
   }, [user.id, currentUserData?.id, isTutorialBot, messages])
+
+  // Check blocking status
+  useEffect(() => {
+    if (!currentUserData?.id || isTutorialBot || isSupportBot) return
+    const checkBlocking = async () => {
+      const blocked = await isUserBlocked(currentUserData.id, user.id)
+      setIsBlocked(blocked)
+    }
+    checkBlocking()
+  }, [user.id, currentUserData?.id, isTutorialBot, isSupportBot])
+
+  const handleToggleBlock = async () => {
+    if (!currentUserData?.id) return
+
+    const { error } = isBlocked
+      ? await unblockUser(currentUserData.id, user.id)
+      : await blockUser(currentUserData.id, user.id)
+
+    if (error) {
+      toast.error(`Erro: ${error}`)
+    } else {
+      const newStatus = !isBlocked
+      setIsBlocked(newStatus)
+      toast.success(newStatus ? `Usuário @${user.nickname} bloqueado` : `Usuário @${user.nickname} desbloqueado`)
+    }
+  }
 
   useEffect(() => {
     // Load messages
@@ -965,6 +993,9 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     <div className="flex flex-col h-full bg-background">
       <ChatHeader
         user={user}
+        currentUser={currentUserData}
+        isBlocked={isBlocked}
+        onToggleBlock={handleToggleBlock}
         onBack={onBack}
         onViewProfile={() => setShowProfile(true)}
       >
@@ -1056,14 +1087,29 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
 
       <MessageInput
         onSend={(content) => {
+          if (isBlocked) {
+            toast.error('Você bloqueou este usuário')
+            return
+          }
           handleSend(content)
           handleTyping(false)
         }}
         onSendPhoto={(photoData, mentions, expiresIn, price) => {
+          if (isBlocked) {
+            toast.error('Você bloqueou este usuário')
+            return
+          }
           handleSendPhoto(photoData, mentions, expiresIn, price)
         }}
-        onSendAudio={handleSendAudio}
+        onSendAudio={(audioUrl) => {
+          if (isBlocked) {
+            toast.error('Você bloqueou este usuário')
+            return
+          }
+          handleSendAudio(audioUrl)
+        }}
         onTyping={handleTyping}
+        disabled={isBlocked}
       />
 
       <UserProfileView

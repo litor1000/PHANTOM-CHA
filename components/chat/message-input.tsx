@@ -24,9 +24,10 @@ interface MessageInputProps {
   onSendPhoto?: (photoData: string, mentions: string[], expiresIn?: number, price?: number) => void
   onSendAudio?: (audioData: string) => void
   onTyping?: (isTyping: boolean) => void
+  disabled?: boolean
 }
 
-export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: MessageInputProps) {
+export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping, disabled }: MessageInputProps) {
   const [message, setMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -184,7 +185,10 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
 
   return (
     <>
-      <div className="flex items-end gap-2 px-4 py-4 md:py-5 bg-card border-t border-border">
+      <div className={cn(
+        "flex items-end gap-2 px-4 py-4 md:py-5 bg-card border-t border-border",
+        disabled && "opacity-50 pointer-events-none grayscale-[0.5]"
+      )}>
         <div className="relative">
           <Button
             variant="ghost"
@@ -207,6 +211,7 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
             className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 md:h-11 md:w-11"
             aria-label="Adicionar emoji"
+            disabled={disabled}
           >
             <Smile className="h-6 w-6" />
           </Button>
@@ -220,9 +225,12 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => photoInputRef.current?.click()}
+          onClick={() => {
+            if (!disabled) photoInputRef.current?.click()
+          }}
           className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 md:h-11 md:w-11"
           aria-label="Enviar foto"
+          disabled={disabled}
         >
           <Camera className="h-6 w-6" />
         </Button>
@@ -255,9 +263,10 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
               value={message}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              placeholder="Mensagem secreta..."
+              placeholder={disabled ? "Você bloqueou este usuário" : "Mensagem secreta..."}
               enterKeyHint="send"
               rows={1}
+              disabled={disabled}
               className={cn(
                 'w-full resize-none rounded-2xl bg-secondary px-4 py-3.5',
                 'text-base text-foreground placeholder:text-muted-foreground/60',
@@ -280,6 +289,7 @@ export function MessageInput({ onSend, onSendPhoto, onSendAudio, onTyping }: Mes
               "shrink-0 rounded-full h-10 w-10 md:h-11 md:w-11 transition-all duration-300",
               isRecording ? "bg-red-500 hover:bg-red-600 animate-bounce" : "bg-primary hover:bg-primary/90"
             )}
+            disabled={disabled}
             aria-label={isRecording ? "Parar gravação" : "Enviar mensagem"}
           >
             {isRecording ? <Mic className="h-5 w-5 text-white" /> : <Send className="h-5 w-5 text-primary-foreground" />}
