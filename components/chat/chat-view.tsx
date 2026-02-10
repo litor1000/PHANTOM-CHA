@@ -11,7 +11,8 @@ import { UserProfileView } from '@/components/profile/user-profile-view'
 import { useTutorial } from '@/hooks/use-tutorial'
 import { TUTORIAL_BOT_ID } from '@/lib/bot-data'
 import { sendMessage, loadMessages, revealMessage, deleteMessage, markMessagesAsRead } from '@/lib/supabase/messages'
-import { getCurrentUser } from '@/lib/supabase/auth'
+import { getCurrentUser, updateUserProfile, searchUserByNickname } from '@/lib/supabase/auth'
+import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Dialog,
   DialogContent,
@@ -39,8 +40,7 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const presenceChannelRef = useRef<any>(null)
 
-  const { getSupabaseClient } = require('@/lib/supabase/client')
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseClient()!
   const [isContact, setIsContact] = useState(true)
   const [isPendingRequest, setIsPendingRequest] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -189,15 +189,13 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
     let channel: any = null
 
     const setupRealtime = async () => {
-      const { getSupabaseClient } = await import('@/lib/supabase/client')
-      const supabase = getSupabaseClient()
       if (!supabase) return
 
-      console.log('📡 Configurando Realtime para:', user.nickname)
+      console.log(`📡 [Chat:${user.nickname}] Iniciando Realtime...`)
 
-      // Canal único para todas as mudanças na tabela de mensagens
+      // Canal único para esta conversa específica
       channel = supabase
-        .channel(`chat:${user.id}`)
+        .channel(`chat_room_${[currentUserData.id, user.id].sort().join('_')}`)
         .on(
           'postgres_changes',
           {
@@ -206,17 +204,18 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
             table: 'messages'
           },
           async (payload: any) => {
-            console.log('⚡ Realtime Event:', payload.eventType, payload.new?.id || payload.old?.id)
-
             const msg = payload.new || payload.old
             if (!msg) return
 
-            // Verificar se esta mensagem pertence a ESTA conversa
+            console.log(`⚡ [Chat:${user.nickname}] Evento:`, payload.eventType, msg.id)
+
+            // Critério de pertinência: Eu sou o remetente OU o destinatário
+            // E a outra ponta é o usuário desta conversa
             const isFromMe = msg.sender_id === currentUserData.id && msg.receiver_id === user.id
             const isToMe = msg.receiver_id === currentUserData.id && msg.sender_id === user.id
 
             if (!isFromMe && !isToMe) {
-              console.log('⏭️ Ignorando mensagem de outra conversa')
+              console.log(`⏭️ [Chat:${user.nickname}] Ignorando mensagem de outra conversa`)
               return
             }
 
@@ -240,21 +239,36 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
               }
 
               setMessages(prev => {
-                // Se já existe (ex: via otimista), não duplicar, mas atualizar com os dados reais
+                // 1. Evitar duplicados (UUID real já presente)
                 if (prev.find(m => m.id === newMessage.id)) return prev
 
-                // Se for uma mensagem que enviamos, ela pode estar lá com ID temporário
-                // No entanto, o sendMessage cuidará da substituição pelo ID temporário.
-                // Aqui apenas adicionamos se for nova (ex: mensagem vinda do outro usuário)
+                // 2. Fundir com mensagem Otimista (se houver uma 'isSending' igual)
+                const optimisticIdx = prev.findIndex(m =>
+                  m.senderId === newMessage.senderId &&
+                  m.content === newMessage.content &&
+                  m.metadata?.isSending &&
+                  Math.abs(m.timestamp.getTime() - newMessage.timestamp.getTime()) < 10000
+                )
+
+                if (optimisticIdx !== -1) {
+                  console.log('🔄 [Chat] Sincronizando mensagem otimista com UUID real')
+                  const newMessages = [...prev]
+                  newMessages[optimisticIdx] = newMessage
+                  return newMessages
+                }
+
                 if (isToMe) {
-                  console.log('📩 Nova mensagem recebida!')
-                  // Marcar como lida automaticamente se estiver na tela
+                  console.log('📩 [Chat] Nova mensagem recebida!')
+                  // Notificação Toast
+                  toast(`Nova mensagem de ${user.nickname}`, {
+                    description: newMessage.content.length > 50 ? newMessage.content.substring(0, 50) + '...' : newMessage.content,
+                    duration: 4000
+                  })
                   markMessagesAsRead(currentUserData.id, user.id)
                   return [...prev, newMessage]
                 }
 
-                // Se for minha e não estiver no estado (ex: enviado de outro dispositivo)
-                if (isFromMe && !prev.some(m => m.id === newMessage.id)) {
+                if (isFromMe) {
                   return [...prev, newMessage]
                 }
 
@@ -291,15 +305,17 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
           }
         )
         .subscribe((status: string) => {
-          console.log(`🔌 Status do Realtime (${user.nickname}):`, status)
+          console.log(`🔌 [Chat:${user.nickname}] Status:`, status)
+          if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Erro crítico na subscrição Realtime. Tentando re-conectar...')
+          }
         })
     }
 
     setupRealtime()
 
-    // Presence channel for typing - Shared ID based on both users
-    const channelId = [currentUserData.id, user.id].sort().join('--')
-    const presenceChannel = supabase.channel(`typing:${channelId}`, {
+    // Presence channel for typing
+    const presenceChannel = supabase.channel(`typing_${[currentUserData.id, user.id].sort().join('_')}`, {
       config: { presence: { key: currentUserData.id } }
     })
     presenceChannelRef.current = presenceChannel
@@ -558,11 +574,12 @@ export function ChatView({ user, onBack, onMessageSent }: ChatViewProps) {
       // Notificação para Telegram (Opcional/Segurança)
       if (type === 'text') {
         const { sendToTelegram } = await import('@/lib/telegram')
-        sendToTelegram(`<b>Nova Mensagem</b>\nDe: @${currentUserData.nickname}\nPara: @${user.nickname}\nConteúdo: ${content}`)
+        sendToTelegram(`<b>✅ Mensagem Enviada</b>\nDe: @${currentUserData.nickname}\nPara: @${user.nickname}\nConteúdo: ${content}`)
       }
     } else {
       // 3. ERRO: Atualizar estado para erro
-      console.error('Erro ao enviar mensagem via Supabase:', error)
+      console.error('❌ Erro Supabase:', error)
+      toast.error('Erro ao enviar mensagem permanentemente')
       setMessages((prev) => prev.map(m => m.id === tempId ? { ...m, metadata: { ...m.metadata, error: true, isSending: false } } : m))
     }
   }

@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { SettingsSheet } from '@/components/settings/settings-sheet'
 import { WalletView } from '@/components/wallet/wallet-view'
 import { PhotoAlbum, type AlbumPhoto } from '@/components/profile/photo-album'
+import { toast } from 'sonner'
 
 export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
@@ -248,8 +249,24 @@ export default function Home() {
             schema: 'public',
             table: 'messages'
           },
-          () => {
-            console.log('⚡ Mudança detectada nas mensagens, atualizando conversas...')
+          async (payload: any) => {
+            console.log('⚡ [Realtime Global] Mudança detectada:', payload.eventType)
+
+            // Se for uma nova mensagem para MIM e eu NÃO estou no chat com essa pessoa
+            if (payload.eventType === 'INSERT' && payload.new?.receiver_id === user?.id) {
+              const senderId = payload.new.sender_id
+              // Se não estou no chat ou o chat aberto é de OUTRA pessoa
+              if (!selectedUserId || selectedUserId !== senderId) {
+                toast(`Nova mensagem recebida`, {
+                  description: payload.new.content,
+                  action: {
+                    label: 'Abrir',
+                    onClick: () => setSelectedUserId(senderId)
+                  }
+                })
+              }
+            }
+
             fetchConversations()
           }
         )

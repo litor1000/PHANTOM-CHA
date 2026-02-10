@@ -290,25 +290,31 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             const receiverData = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver
 
             const isOwn = msg.sender_id === userId
+            const otherUserId = isOwn ? msg.receiver_id : msg.sender_id
             const otherUser = isOwn ? receiverData : senderData
 
-            // Ignorar mensagens de sistema ou usuários inválidos
-            if (!otherUser) return
-
-            const otherUserId = otherUser.id
+            // Se não conseguimos carregar o perfil do outro usuário (RLS ou perfil deletado)
+            // Criamos um objeto de fallback para que a conversa NÃO suma da lista
+            const safeOtherUser = otherUser || {
+                id: otherUserId,
+                name: 'Usuário',
+                nickname: otherUserId.substring(0, 8),
+                avatar: '',
+                isOnline: false
+            }
 
             // Se já processamos esta conversa, apenas atualize contagens se necessário
             if (!conversationsMap.has(otherUserId)) {
 
                 // Mapear usuário do banco para tipo User
                 const userObj = {
-                    id: otherUser.id,
-                    name: otherUser.name,
-                    nickname: otherUser.nickname,
-                    email: otherUser.email,
-                    phone: otherUser.phone,
-                    avatar: otherUser.profile_photo || otherUser.avatar || '',
-                    isOnline: otherUser.is_online
+                    id: safeOtherUser.id,
+                    name: safeOtherUser.name,
+                    nickname: safeOtherUser.nickname,
+                    email: (safeOtherUser as any).email || '',
+                    phone: (safeOtherUser as any).phone || '',
+                    avatar: (safeOtherUser as any).profile_photo || (safeOtherUser as any).avatar || '',
+                    isOnline: safeOtherUser.isOnline
                 }
 
                 // Mapear mensagem
