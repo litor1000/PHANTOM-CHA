@@ -705,7 +705,7 @@ export default function Home() {
 
       {/* Bottom Navigation Bar */}
       {!selectedUserId && (
-        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-background/80 backdrop-blur-xl border-t border-border/40 px-6 py-3 z-40 flex items-center justify-between safe-bottom">
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-background/80 backdrop-blur-xl border-t border-border/40 px-6 py-3 z-40 flex items-center justify-between pb-safe">
           <BottomNavItem
             icon={MessageSquare}
             label="Chats"
