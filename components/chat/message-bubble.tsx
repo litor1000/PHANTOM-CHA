@@ -256,7 +256,7 @@ export function MessageBubble({
             isOwn
               ? 'bg-message-sent text-foreground rounded-br-md'
               : 'bg-message-received text-foreground rounded-bl-md',
-            showBlur && 'min-h-[150px] min-w-[180px] flex flex-col justify-center shadow-lg border border-primary/20',
+            showBlur && 'shadow-lg border border-primary/20 overflow-hidden',
             !isOwn && !isRevealed && message.type !== 'request' && !isLocked && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
             isLocked && 'cursor-pointer hover:brightness-110 active:scale-[0.99] border-2 border-amber-500/50 bg-amber-500/10',
             countdown !== null && countdown <= 3 && 'animate-pulse'
@@ -491,13 +491,13 @@ export function MessageBubble({
             )}
 
             {showBlur && !showLock && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2 text-primary">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/10 backdrop-blur-[2px] z-10">
+                <div className="flex flex-col items-center gap-1 text-primary">
                   <div className="relative">
-                    <Sparkles className="h-10 w-10 animate-pulse" />
-                    <Eye className="h-5 w-5 absolute -bottom-1 -right-1 bg-background rounded-full p-0.5" />
+                    <Sparkles className="h-6 w-6 animate-pulse" />
+                    <Eye className="h-3 w-3 absolute -bottom-0.5 -right-0.5" />
                   </div>
-                  <span className="text-xs font-bold tracking-widest uppercase opacity-80">Clique para ver</span>
+                  <span className="text-[8px] font-black tracking-widest uppercase opacity-70">Ver</span>
                 </div>
               </div>
             )}
