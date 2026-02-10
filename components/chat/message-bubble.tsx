@@ -436,9 +436,9 @@ export function MessageBubble({
                           <img
                             src={message.imageUrl}
                             alt="Blur Preview"
-                            className="w-full h-full object-cover blur-[10px] scale-110 opacity-60 brightness-[0.25] transition-all duration-700 group-hover:scale-105 group-hover:brightness-[0.35]"
+                            className="w-full h-full object-cover blur-[10px] scale-110 opacity-80 brightness-[0.5] transition-all duration-700 group-hover:scale-105 group-hover:brightness-[0.6]"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black/90" />
+                          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/70" />
                           <div className="absolute inset-0 backdrop-blur-[1px]" />
                         </div>
                       )}
