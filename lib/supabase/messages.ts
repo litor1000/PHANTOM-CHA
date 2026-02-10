@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './client'
 import type { Message } from '../types'
+import { uploadChatImage, uploadChatAudio, uploadChatVideo } from './storage'
 
 /**
  * Envia uma mensagem para outro usuário
@@ -22,19 +23,42 @@ export async function sendMessage(message: {
             return { data: null, error: 'Supabase não configurado' }
         }
 
+        let finalImageUrl = message.imageUrl
+        let finalVideoUrl = message.videoUrl
+        let finalAudioUrl = message.audioUrl
+
+        const msgId = `msg-${Date.now()}`
+
+        // Se for Base64, fazer upload para Storage primeiro
+        // Isso evita que o Realtime falhe por payload muito grande (limite de 1MB)
+        if (message.imageUrl?.startsWith('data:image')) {
+            const uploadRes = await uploadChatImage(message.senderId, message.imageUrl, msgId)
+            if (uploadRes) finalImageUrl = uploadRes.url
+        }
+
+        if (message.videoUrl?.startsWith('data:video')) {
+            const uploadRes = await uploadChatVideo(message.senderId, message.videoUrl, msgId)
+            if (uploadRes) finalVideoUrl = uploadRes.url
+        }
+
+        if (message.audioUrl?.startsWith('data:audio')) {
+            const uploadRes = await uploadChatAudio(message.senderId, message.audioUrl, msgId)
+            if (uploadRes) finalAudioUrl = uploadRes.url
+        }
+
         const messageData = {
             content: message.content,
             sender_id: message.senderId,
             receiver_id: message.receiverId,
             type: message.type || 'text',
-            image_url: message.imageUrl,
-            video_url: message.videoUrl,
-            audio_url: message.audioUrl,
+            image_url: finalImageUrl,
+            video_url: finalVideoUrl,
+            audio_url: finalAudioUrl,
             allowed_nicknames: message.allowedNicknames,
             is_revealed: false, // Sempre começa oculta
             is_read: false,
-            expires_in: message.expiresIn !== undefined ? message.expiresIn : 10, // Permite 0 (sem expiração)
-            metadata: message.metadata // Novo campo
+            expires_in: message.expiresIn !== undefined ? message.expiresIn : 10,
+            metadata: message.metadata
         }
 
         const { data, error } = await (supabase

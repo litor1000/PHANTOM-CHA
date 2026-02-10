@@ -439,16 +439,16 @@ export function MessageBubble({
                 if (showLock) {
                   return (
                     <div className="relative group overflow-hidden rounded-xl bg-zinc-950/40 border border-amber-500/20 shadow-2xl transition-all duration-500 hover:shadow-amber-500/10">
-                      {/* Efeito de Vidro Jateado (Blur Preview) */}
+                      {/* Efeito de Vidro Jateado Premium (Blur Preview) */}
                       {message.imageUrl && (
-                        <div className="absolute inset-0 z-0">
+                        <div className="absolute inset-0 z-0 overflow-hidden">
                           <img
                             src={message.imageUrl}
                             alt="Blur Preview"
-                            className="w-full h-full object-cover blur-[10px] scale-110 opacity-80 brightness-[0.5] transition-all duration-700 group-hover:scale-105 group-hover:brightness-[0.6]"
+                            className="w-full h-full object-cover blur-[40px] scale-125 opacity-70 brightness-[0.4] transition-all duration-1000 group-hover:scale-110 group-hover:brightness-[0.5]"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/70" />
-                          <div className="absolute inset-0 backdrop-blur-[1px]" />
+                          <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-transparent to-amber-500/10" />
+                          <div className="absolute inset-0 backdrop-blur-xl" />
                         </div>
                       )}
 
@@ -499,9 +499,15 @@ export function MessageBubble({
                     />
                   </div>
                 ) : (
-                  <div className="p-8 flex flex-col items-center gap-2 text-muted-foreground bg-zinc-900/30 rounded-lg border border-white/5">
-                    <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    <span className="text-[10px] font-medium tracking-wide uppercase opacity-50">Preparando Mídia...</span>
+                  <div className="flex flex-col items-center justify-center p-12 gap-3 text-muted-foreground bg-zinc-900/60 rounded-xl border border-white/5 min-w-[200px]">
+                    <div className="relative">
+                      <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                      <Sparkles className="w-3 h-3 text-primary absolute -top-1 -right-1 animate-bounce" />
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[10px] font-black tracking-[0.2em] uppercase opacity-40 italic">Processando</span>
+                      <span className="text-[8px] font-bold text-primary/60 uppercase tracking-tighter">Preparando Mídia...</span>
+                    </div>
                   </div>
                 )
               })()
@@ -531,13 +537,13 @@ export function MessageBubble({
             )}
 
             {showBlur && !showLock && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/10 backdrop-blur-[2px] z-10">
-                <div className="flex flex-col items-center gap-1 text-primary">
-                  <div className="relative">
-                    <Sparkles className="h-6 w-6 animate-pulse" />
-                    <Eye className="h-3 w-3 absolute -bottom-0.5 -right-0.5" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[15px] z-10">
+                <div className="flex flex-col items-center gap-2 text-primary">
+                  <div className="relative group-hover:scale-110 transition-transform duration-500">
+                    <Sparkles className="h-8 w-8 animate-pulse text-primary fill-primary/20" />
+                    <Eye className="h-4 w-4 absolute -bottom-1 -right-1 text-white" />
                   </div>
-                  <span className="text-[8px] font-black tracking-widest uppercase opacity-70">Ver</span>
+                  <span className="text-[9px] font-black tracking-[0.3em] uppercase opacity-80 italic">Revelar</span>
                 </div>
               </div>
             )}
