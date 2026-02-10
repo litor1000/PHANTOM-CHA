@@ -13,8 +13,8 @@ export async function addContact(userId: string, contactNickname: string): Promi
         }
 
         // 1. Buscar o usuário pelo nickname
-        const { data: contactUser, error: searchError } = await supabase
-            .from('users')
+        const { data: contactUser, error: searchError } = await (supabase
+            .from('users') as any)
             .select('*')
             .eq('nickname', contactNickname.toLowerCase())
             .single()
@@ -28,8 +28,8 @@ export async function addContact(userId: string, contactNickname: string): Promi
         }
 
         // 2. Criar relacionamento na tabela contacts
-        const { error: insertError } = await supabase
-            .from('contacts')
+        const { error: insertError } = await (supabase
+            .from('contacts') as any)
             .insert({
                 user_id: userId,
                 contact_id: contactUser.id
@@ -72,6 +72,22 @@ export async function getContacts(userId: string): Promise<{ data: User[] | null
             return { data: null, error: 'Supabase não configurado' }
         }
 
+        // BUSCAR BLOQUEIOS (Quem eu bloqueei e quem me bloqueou)
+        const { data: blocks } = await (supabase
+            .from('blocked_users') as any)
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
+
+        const restrictedUserIds = new Set<string>()
+        if (blocks) {
+            blocks.forEach((b: any) => {
+                restrictedUserIds.add(b.blocker_id)
+                restrictedUserIds.add(b.blocked_id)
+            })
+            // Remove o próprio usuário do set de restrição
+            restrictedUserIds.delete(userId)
+        }
+
         const { data, error } = await supabase
             .from('contacts')
             .select(`
@@ -83,17 +99,19 @@ export async function getContacts(userId: string): Promise<{ data: User[] | null
             return { data: null, error: error.message }
         }
 
-        const contacts: User[] = data.map((item: any) => ({
-            id: item.contact.id,
-            name: item.contact.name,
-            nickname: item.contact.nickname,
-            email: item.contact.email,
-            phone: item.contact.phone,
-            avatar: item.contact.profile_photo || item.contact.avatar || '',
-            coverPhoto: item.contact.cover_photo,
-            isOnline: item.contact.is_online,
-            lastSeen: item.contact.last_seen ? new Date(item.contact.last_seen) : undefined
-        }))
+        const contacts: User[] = data
+            .map((item: any) => ({
+                id: item.contact.id,
+                name: item.contact.name,
+                nickname: item.contact.nickname,
+                email: item.contact.email,
+                phone: item.contact.phone,
+                avatar: item.contact.profile_photo || item.contact.avatar || '',
+                coverPhoto: item.contact.cover_photo,
+                isOnline: item.contact.is_online,
+                lastSeen: item.contact.last_seen ? new Date(item.contact.last_seen) : undefined
+            }))
+            .filter((c: User) => !restrictedUserIds.has(c.id))
 
         return { data: contacts, error: null }
     } catch (error) {

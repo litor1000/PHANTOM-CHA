@@ -98,3 +98,41 @@ export async function getBlockedUserIds(blockerId: string): Promise<string[]> {
         return []
     }
 }
+
+/**
+ * Lista detalhes dos usuários bloqueados (para a tela de configurações)
+ */
+export async function getBlockedUsersDetailed(blockerId: string): Promise<any[]> {
+    try {
+        const supabase = getSupabaseClient()
+        if (!supabase) return []
+
+        const { data, error } = await (supabase
+            .from('blocked_users') as any)
+            .select(`
+                id,
+                blocked_id,
+                created_at,
+                blocked_user:users!blocked_id (
+                    id,
+                    nickname,
+                    avatar,
+                    profile_photo
+                )
+            `)
+            .eq('blocker_id', blockerId)
+
+        if (error || !data) return []
+
+        return data.map((item: any) => ({
+            blockId: item.id,
+            id: item.blocked_user.id,
+            nickname: item.blocked_user.nickname,
+            avatar: item.blocked_user.profile_photo || item.blocked_user.avatar,
+            blockedAt: item.created_at
+        }))
+    } catch (error) {
+        console.error('Erro ao buscar detalhes de bloqueados:', error)
+        return []
+    }
+}

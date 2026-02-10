@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './client'
 import type { Message } from '../types'
 import { uploadChatImage, uploadChatAudio, uploadChatVideo } from './storage'
+import { getBlockedUserIds } from './blocking'
 
 /**
  * Envia uma mensagem para outro usuário
@@ -62,6 +63,17 @@ export async function sendMessage(message: {
             } else {
                 console.warn('⚠️ [Messages] Falha no upload Storage, enviando Base64 para o banco (pode falhar/truncar)')
             }
+        }
+
+        // VERIFICAR BLOQUEIO ANTES DE ENVIAR
+        const { data: isBlockedData } = await (supabase
+            .from('blocked_users') as any)
+            .select('id')
+            .or(`and(blocker_id.eq.${message.senderId},blocked_id.eq.${message.receiverId}),and(blocker_id.eq.${message.receiverId},blocked_id.eq.${message.senderId})`)
+            .single()
+
+        if (isBlockedData) {
+            return { data: null, error: 'Usuário bloqueado. Não é possível enviar mensagens.' }
         }
 
         const messageData = {
@@ -299,6 +311,22 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             return { data: null, error: 'Supabase não configurado' }
         }
 
+        // BUSCAR BLOQUEIOS (Quem eu bloqueei e quem me bloqueou)
+        const { data: blocks } = await (supabase
+            .from('blocked_users') as any)
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
+
+        const restrictedUserIds = new Set<string>()
+        if (blocks) {
+            blocks.forEach((b: any) => {
+                restrictedUserIds.add(b.blocker_id)
+                restrictedUserIds.add(b.blocked_id)
+            })
+            // Remove o próprio usuário do set de restrição
+            restrictedUserIds.delete(userId)
+        }
+
         const { data: messages, error } = await (supabase
             .from('messages') as any)
             .select(`
@@ -390,10 +418,10 @@ export async function getUserConversations(userId: string): Promise<{ data: any[
             }
         })
 
-        // Filtrar conversas que não têm mensagens ativas
-        // Se todas as mensagens expiraram, a conversa não deve aparecer
+        // Filtrar conversas que não têm mensagens ativas ou que estão envolvidas em bloqueios
         const conversationsWithMessages = Array.from(conversationsMap.values()).filter(conv => {
-            return conv.lastMessage && conv.lastMessage.content
+            const isBlocked = restrictedUserIds.has(conv.user.id)
+            return !isBlocked && conv.lastMessage && conv.lastMessage.content
         })
 
         return { data: conversationsWithMessages, error: null }

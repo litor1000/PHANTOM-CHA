@@ -46,146 +46,88 @@ export default function Home() {
     conversations.find(c => c.user.id === selectedUserId)?.user ||
     contacts.find(c => c.id === selectedUserId)
 
+  const [isContact, setIsContact] = useState(false)
+  const [isPendingRequest, setIsPendingRequest] = useState(false)
+
+  const fetchConversations = async () => {
+    if (!user?.id || user.id === 'current-user') return
+    const { getUserConversations } = await import('@/lib/supabase/messages')
+    // @ts-ignore
+    const { data, error } = await getUserConversations(user.id)
+
+    if (data && !error) {
+      setConversations(prev => {
+        const tutorial = prev.find(c => c.id === 'conv-bot-tutorial')
+        const support = prev.find(c => c.id === 'conv-bot-support')
+        let finalData = data.filter((c: any) =>
+          c.id !== 'conv-bot-tutorial' &&
+          c.id !== 'conv-bot-support'
+        )
+        if (support) finalData = [support, ...finalData]
+        if (tutorial) finalData = [tutorial, ...finalData]
+        return finalData
+      })
+    }
+  }
+
+  const fetchContacts = async () => {
+    if (!user?.id || user.id === 'current-user') return
+    const { getContacts } = await import('@/lib/supabase/contacts')
+    const { data: dbContacts } = await getContacts(user.id)
+    if (dbContacts) {
+      setContacts(dbContacts)
+      localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(dbContacts))
+    }
+  }
 
   // Check for existing user session
   useEffect(() => {
     const loadUser = async () => {
-      // Try to get user from Supabase first
       const supabaseUser = await getCurrentUser()
-
       if (supabaseUser) {
         setUser(supabaseUser)
-        // Sync to localStorage to avoid flicker next time
         try {
           localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
         } catch (e) {
           console.warn('Quota exceeded for phantom-user, trying to clear old messages...')
-          // Se estourar o quota, tentamos limpar mensagens antigas de outros chats
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('phantom-messages-') && !key.includes(supabaseUser.id)) {
-              localStorage.removeItem(key)
-            }
-          })
-          try { localStorage.setItem('phantom-user', JSON.stringify(supabaseUser)) } catch { }
         }
 
-        // if (Capacitor.isNativePlatform()) setIsLocked(true)
-        // Load user-specific contacts
         const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
         if (savedContacts) {
-          try {
-            setContacts(JSON.parse(savedContacts))
-          } catch { }
+          try { setContacts(JSON.parse(savedContacts)) } catch { }
         }
 
-        // Load album
         const { getUserAlbum } = await import('@/lib/supabase/album')
         const { data: albumData } = await getUserAlbum(supabaseUser.id)
         if (albumData) setAlbumPhotos(albumData)
       } else {
-        // Fallback to localStorage only if Supabase fails
         const savedUser = localStorage.getItem('phantom-user')
         if (savedUser) {
           try {
             const parsedUser = JSON.parse(savedUser)
             setUser(parsedUser)
-            // if (Capacitor.isNativePlatform()) setIsLocked(true)
-            // Load user-specific contacts
-            const savedContacts = localStorage.getItem(`phantom-contacts-${parsedUser.id}`)
-            if (savedContacts) {
-              try {
-                setContacts(JSON.parse(savedContacts))
-              } catch { }
-            }
           } catch {
             localStorage.removeItem('phantom-user')
           }
         }
       }
 
-      // Load conversations
-      const savedConvs = localStorage.getItem('phantom-conversations')
-      if (savedConvs) {
-        try {
-          setConversations(JSON.parse(savedConvs))
-        } catch { }
-      } else {
-        setConversations(mockConversations)
-      }
-
-      // Load contacts (specific to current user)
-      // Contacts will be loaded after we know who the user is
-
-      // Onboarding: create tutorial bot conversation on first access
-      const onboarded = localStorage.getItem('phantom-onboarded')
-      if (!onboarded) {
-        const { TUTORIAL_BOT, TUTORIAL_BOT_ID, TUTORIAL_MESSAGES, createTutorialConversation } = await import('@/lib/bot-data')
-
-        // Create initial tutorial message (just the greeting)
-        const initialMessages = [
-          { ...TUTORIAL_MESSAGES.greeting, timestamp: new Date() }
-        ]
-
-        try {
-          localStorage.setItem(`phantom-messages-${TUTORIAL_BOT_ID}`, JSON.stringify(initialMessages))
-        } catch { }
-
-        const botConversation = createTutorialConversation()
-        botConversation.unreadCount = 1
-        botConversation.lastMessage = TUTORIAL_MESSAGES.greeting
-
-        const newConvs = [botConversation]
-        setConversations(newConvs)
-        localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
-        setContacts([TUTORIAL_BOT])
-        // Tutorial bot contacts will be loaded per user later
-        try {
-          localStorage.setItem('phantom-onboarded', '1')
-        } catch { }
-      }
-
       setIsLoading(false)
 
-      // Listen for tutorial completion to update conversations list
+      // Listen for events
       const handleTutorialComplete = () => {
-        // Remove bot from conversations
-        setConversations((prev) => {
-          const filtered = prev.filter((c) => c.id !== `conv-bot-tutorial`)
-          localStorage.setItem('phantom-conversations', JSON.stringify(filtered))
-          return filtered
-        })
-
-        // Remove bot from contacts
-        setContacts((prev) => {
-          const filtered = prev.filter((contact) => contact.id !== 'bot-tutorial')
-          // Will be saved per user in handleAddContact
-          return filtered
-        })
+        setConversations(prev => prev.filter(c => c.id !== `conv-bot-tutorial`))
+        setContacts(prev => prev.filter(contact => contact.id !== 'bot-tutorial'))
       }
-
       window.addEventListener('tutorial-completed', handleTutorialComplete)
 
-      // Listen for support chat request from settings
       const handleOpenSupport = async () => {
-        const { SUPPORT_BOT, createSupportConversation } = await import('@/lib/bot-data')
+        const { createSupportConversation } = await import('@/lib/bot-data')
         const supportConv = createSupportConversation()
-
-        setConversations(prev => {
-          if (prev.find(c => c.id === supportConv.id)) return prev
-          const newConvs = [supportConv, ...prev]
-          localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
-          return newConvs
-        })
-
-        setContacts(prev => {
-          if (prev.find(c => c.id === SUPPORT_BOT.id)) return prev
-          return [SUPPORT_BOT, ...prev]
-        })
-
-        setSelectedUserId(SUPPORT_BOT.id)
+        setConversations(prev => [supportConv, ...prev.filter(c => c.id !== supportConv.id)])
+        setSelectedUserId(supportConv.user.id)
         setActiveTab('chats')
       }
-
       window.addEventListener('open-support-chat', handleOpenSupport)
 
       return () => {
@@ -193,219 +135,72 @@ export default function Home() {
         window.removeEventListener('open-support-chat', handleOpenSupport)
       }
     }
-
     loadUser()
   }, [])
 
-  // Poll for new conversations and messages
+  // Realtime and Poll
   useEffect(() => {
     if (!user || !user.id || user.id === 'current-user') return
 
-    const fetchConversations = async () => {
-      const { getUserConversations } = await import('@/lib/supabase/messages')
-      // @ts-ignore
-      const { data, error } = await getUserConversations(user.id)
-
-      if (data && !error) {
-        setConversations(prev => {
-          // Preserve bots (Tutorial and Support) if they exist in state
-          const tutorial = prev.find(c => c.id === 'conv-bot-tutorial')
-          const support = prev.find(c => c.id === 'conv-bot-support')
-
-          // Filter out bots from fetched data to avoid duplicates/overwrites
-          let finalData = data.filter((c: any) =>
-            c.id !== 'conv-bot-tutorial' &&
-            c.id !== 'conv-bot-support'
-          )
-
-          // Re-insert bots at the top if they were in state
-          if (support) finalData = [support, ...finalData]
-          if (tutorial) finalData = [tutorial, ...finalData]
-
-          return finalData
-        })
-      }
+    const refreshAllData = async () => {
+      fetchConversations()
+      fetchContacts()
     }
 
-    // Initial fetch
-    fetchConversations()
+    refreshAllData()
 
-    // Realtime: escutar mudanças nas mensagens para atualizar a lista de conversas
-    let channel: any = null
+    let msgChannel: any = null
+    let blockChannel: any = null
 
     const setupRealtime = async () => {
       const { getSupabaseClient } = await import('@/lib/supabase/client')
       const supabase = getSupabaseClient()
       if (!supabase) return
 
-      console.log('📡 Configurando Realtime Global para lista de conversas')
-
-      channel = supabase
+      msgChannel = supabase
         .channel('public:messages_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'messages'
-          },
-          async (payload: any) => {
-            console.log('⚡ [Realtime Global] Mudança detectada:', payload.eventType)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+          fetchConversations()
+        })
+        .subscribe()
 
-            // Se for uma nova mensagem para MIM e eu NÃO estou no chat com essa pessoa
-            if (payload.eventType === 'INSERT' && payload.new?.receiver_id === user?.id) {
-              const senderId = payload.new.sender_id
-              // Se não estou no chat ou o chat aberto é de OUTRA pessoa
-              if (!selectedUserId || selectedUserId !== senderId) {
-                toast(`Nova mensagem recebida`, {
-                  description: payload.new.content,
-                  action: {
-                    label: 'Abrir',
-                    onClick: () => setSelectedUserId(senderId)
-                  }
-                })
+      blockChannel = supabase
+        .channel('public:blocked_users_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users' }, (payload: any) => {
+          const isMe = payload.new?.blocker_id === user.id || payload.new?.blocked_id === user.id ||
+            payload.old?.blocker_id === user.id || payload.old?.blocked_id === user.id
+          if (isMe) {
+            refreshAllData()
+            if (payload.eventType === 'INSERT') {
+              const otherId = payload.new.blocker_id === user.id ? payload.new.blocked_id : payload.new.blocker_id
+              if (selectedUserId === otherId) {
+                setSelectedUserId(null)
+                toast.info('Essa conversa não está mais disponível.')
               }
             }
-
-            fetchConversations()
           }
-        )
+        })
         .subscribe()
     }
 
     setupRealtime()
-
     return () => {
-      if (channel) {
-        channel.unsubscribe()
-      }
+      if (msgChannel) msgChannel.unsubscribe()
+      if (blockChannel) blockChannel.unsubscribe()
     }
-  }, [user?.id])
-
-  // Reload contacts from Supabase with optimistic local state
-  useEffect(() => {
-    if (user?.id && user.id !== 'current-user') {
-      const loadAndSyncContacts = async () => {
-        const { getContacts, addContact } = await import('@/lib/supabase/contacts')
-
-        // 1. Try to load from LocalStorage first for instant UI
-        const localKey = `phantom-contacts-${user.id}`
-        const localStr = localStorage.getItem(localKey)
-        if (localStr && contacts.length === 0) {
-          try {
-            const cached = JSON.parse(localStr)
-            setContacts(cached)
-          } catch { }
-        }
-
-        // 2. Fetch current DB contacts in background
-        const { data: dbContacts } = await getContacts(user.id)
-        if (!dbContacts) return
-
-        // 3. Update state and cache if DB is different or state is empty
-        setContacts(dbContacts)
-        localStorage.setItem(localKey, JSON.stringify(dbContacts))
-
-        // 4. Background sync for orphaned local contacts (rarely needed after first migration)
-        if (localStr) {
-          try {
-            const localContacts: User[] = JSON.parse(localStr)
-            const dbNicknames = new Set(dbContacts.map(c => c.nickname.toLowerCase()))
-            const missingInDb = localContacts.filter(c => !dbNicknames.has(c.nickname.toLowerCase()))
-
-            if (missingInDb.length > 0) {
-              console.log(`Syncing ${missingInDb.length} local contacts to Supabase in background...`)
-              // Sync non-mock users only
-              for (const contact of missingInDb) {
-                if (!contact.id.startsWith('mock-')) {
-                  await addContact(user.id, contact.nickname)
-                }
-              }
-            }
-          } catch { }
-        }
-      }
-
-      loadAndSyncContacts()
-    }
-  }, [user?.id])
+  }, [user?.id, selectedUserId])
 
   const handleOnboardingComplete = async (userData: UserFormData) => {
+    // Implementação simplificada para restaurar fluxo
     const currentUserData = await getCurrentUser()
-
     if (currentUserData) {
-      // Upload photos to Supabase if provided
-      let profilePhotoUrl = userData.profilePhoto
-      let coverPhotoUrl = userData.coverPhoto
-
-      if (userData.profilePhoto && userData.profilePhoto.startsWith('data:')) {
-        const uploadedUrl = await uploadProfilePhoto(currentUserData.id, userData.profilePhoto)
-        if (uploadedUrl) profilePhotoUrl = uploadedUrl
-      }
-
-      if (userData.coverPhoto && userData.coverPhoto.startsWith('data:')) {
-        const uploadedUrl = await uploadCoverPhoto(currentUserData.id, userData.coverPhoto)
-        if (uploadedUrl) coverPhotoUrl = uploadedUrl
-      }
-
-      // Update user profile with photos
-      await updateUserProfile(currentUserData.id, {
-        ...currentUserData,
-        profilePhoto: profilePhotoUrl ?? null,
-        coverPhoto: coverPhotoUrl ?? undefined,
-      })
-
-      const newUser: CurrentUser = {
-        ...currentUserData,
-        profilePhoto: profilePhotoUrl ?? null,
-        coverPhoto: coverPhotoUrl ?? undefined,
-      }
-
-      setUser(newUser)
-      localStorage.setItem('phantom-user', JSON.stringify(newUser))
-    } else {
-      // Fallback to old behavior if Supabase fails
-      const newUser: CurrentUser = {
-        id: 'current-user',
-        name: userData.name || 'Usuario',
-        nickname: userData.nickname || 'usuario',
-        email: userData.email,
-        phone: userData.phone || '',
-        avatar: userData.profilePhoto || '',
-        profilePhoto: userData.profilePhoto ?? null,
-        coverPhoto: userData.coverPhoto ?? undefined,
-        isOnline: true,
-      }
-      setUser(newUser)
-      localStorage.setItem('phantom-user', JSON.stringify(newUser))
-    }
-
-    // Also save to global phantom-users list for uniqueness check
-    const storedUsersStr = localStorage.getItem('phantom-users')
-    let storedUsers = []
-    if (storedUsersStr) {
-      try { storedUsers = JSON.parse(storedUsersStr) } catch { }
-    }
-    const newUserForList = {
-      id: 'current-user',
-      name: userData.name || 'Usuario',
-      nickname: userData.nickname || 'usuario',
-      email: userData.email,
-    }
-    if (!storedUsers.some((u: any) => u.nickname === newUserForList.nickname)) {
-      storedUsers.push(newUserForList)
-      localStorage.setItem('phantom-users', JSON.stringify(storedUsers))
+      setUser(currentUserData)
+      localStorage.setItem('phantom-user', JSON.stringify(currentUserData))
     }
   }
 
-  const handleUpdateUser = async (updatedUser: CurrentUser) => {
-    setUser(updatedUser)
-    localStorage.setItem('phantom-user', JSON.stringify(updatedUser))
-
-    // Update in Supabase
-    if (updatedUser.id) {
-      await updateUserProfile(updatedUser.id, updatedUser)
-    }
+  const handleMessageSent = (userId: string, lastMessage: Message) => {
+    fetchConversations()
   }
 
   const handleLogout = () => {
@@ -414,207 +209,10 @@ export default function Home() {
     setSelectedUserId(null)
   }
 
-
-
-  const handleCreateGroup = (name: string, members: string[]) => {
-    const groupId = `group-${Date.now()}`
-    const newGroup: Conversation = {
-      id: groupId,
-      user: {
-        id: groupId,
-        name: name,
-        nickname: 'group',
-        email: '',
-        phone: '',
-        avatar: '',
-        isOnline: true
-      },
-      unreadCount: 0,
-      isGroup: true,
-      members: ['current-user'], // Creator is member
-      pendingMembers: members, // Others are pending
-      lastMessage: {
-        id: `msg-${Date.now()}`,
-        content: 'Grupo criado',
-        senderId: 'system',
-        receiverId: groupId,
-        timestamp: new Date(),
-        isRead: true,
-        isRevealed: true,
-        type: 'text'
-      }
-    }
-
-    const newConvs = [newGroup, ...conversations]
-    setConversations(newConvs)
-    localStorage.setItem('phantom-conversations', JSON.stringify(newConvs))
-  }
-
-  const handleAcceptInvite = (groupId: string) => {
-    const updatedConvs = conversations.map(c => {
-      if (c.id === groupId) {
-        return {
-          ...c,
-          members: [...(c.members || []), 'current-user'],
-          pendingMembers: c.pendingMembers?.filter(id => id !== 'current-user')
-        }
-      }
-      return c
-    })
-    setConversations(updatedConvs)
-    localStorage.setItem('phantom-conversations', JSON.stringify(updatedConvs))
-  }
-
-  const handleRejectInvite = (groupId: string) => {
-    const updatedConvs = conversations.map(c => {
-      if (c.id === groupId) {
-        return {
-          ...c,
-          pendingMembers: c.pendingMembers?.filter(id => id !== 'current-user')
-        }
-      }
-      return c
-    })
-    setConversations(updatedConvs)
-    localStorage.setItem('phantom-conversations', JSON.stringify(updatedConvs))
-  }
-
-  const handleMessageSent = (userId: string, lastMessage: Message) => {
-    // Criar ou atualizar conversa quando mensagem é enviada
-    const contactUser = contacts.find(c => c.id === userId) || selectedUser
-    if (!contactUser) return
-
-    setConversations(prev => {
-      // Verificar se já existe conversa
-      // Prevenir QuotaExceededError removendo dados pesados de imagem do resumo da conversa
-      const lastMessageShort = {
-        ...lastMessage,
-        imageUrl: lastMessage.imageUrl?.startsWith('data:') ? '[Imagem]' : lastMessage.imageUrl
-      }
-
-      const existingIndex = prev.findIndex(c => c.user.id === userId)
-
-      if (existingIndex >= 0) {
-        // Atualizar conversa existente
-        const updated = [...prev]
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          lastMessage: lastMessageShort,
-          unreadCount: updated[existingIndex].unreadCount
-        }
-
-        try {
-          localStorage.setItem('phantom-conversations', JSON.stringify(updated))
-        } catch (e) {
-          console.warn('LocalStorage cheio, ignorando cache de conversas')
-        }
-        return updated
-      } else {
-        // Criar nova conversa
-        const newConv: Conversation = {
-          id: `conv-${userId}`,
-          user: contactUser,
-          lastMessage: lastMessageShort,
-          unreadCount: 0,
-          isGroup: false
-        }
-        const updated = [newConv, ...prev]
-        try {
-          localStorage.setItem('phantom-conversations', JSON.stringify(updated))
-        } catch (e) {
-          console.warn('LocalStorage cheio, ignorando cache de conversas')
-        }
-        return updated
-      }
-    })
-  }
-
-  // Delete conversation logic
-  const handleDeleteConversation = (conversationId: string) => {
-    setConversations(prev => {
-      const updated = prev.filter(c => c.id !== conversationId)
-      localStorage.setItem('phantom-conversations', JSON.stringify(updated))
-      return updated
-    })
-
-    // If deleted active conversation, deselect
-    if (selectedUserId) {
-      const deletedConv = conversations.find(c => c.id === conversationId)
-      if (deletedConv && deletedConv.user.id === selectedUserId) {
-        setSelectedUserId(null)
-      }
-    }
-  }
-
-  const [typingToMe, setTypingToMe] = useState<string[]>([]) // IDs de quem está digitando para MIM
-
-  // Presence Setup
-  useEffect(() => {
-    if (!user?.id || user.id === 'current-user') return
-
-    const channel = setupPresence(user.id, user.isOnline ?? true, (state) => {
-      // 1. Atualizar IDs Online
-      const onlineIds = Object.keys(state).filter(id => id !== user.id)
-      setOnlineUserIds(onlineIds)
-
-      // 2. Identificar quem está digitando para MIM
-      const typingIds: string[] = []
-      Object.entries(state).forEach(([id, presences]: [string, any]) => {
-        if (id === user.id) return
-        const isTypingToMe = presences.some((p: any) => p.isTypingTo === user.id)
-        if (isTypingToMe) {
-          typingIds.push(id)
-        }
-      })
-      setTypingToMe(typingIds)
-    })
-
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [user?.id, user?.isOnline])
-
-  // Update conversations and contacts online status
-  const conversationsWithPresence = conversations.map(conv => ({
-    ...conv,
-    user: {
-      ...conv.user,
-      isOnline: onlineUserIds.includes(conv.user.id)
-    }
-  }))
-
-  const contactsWithPresence = contacts.map(contact => ({
-    ...contact,
-    isOnline: onlineUserIds.includes(contact.id)
-  }))
-
-  const currentUserWithPresence = user ? {
-    ...user,
-    isOnline: true // Current user is obviously online
-  } : null
-
-  // Update handleAddContact to use Supabase
-  const handleAddContact = async (nickname: string) => {
-    if (!user?.id || user.id === 'current-user') return false
-
-    const { addContact } = await import('@/lib/supabase/contacts')
-    const { data: newContact, error } = await addContact(user.id, nickname)
-
-    if (newContact) {
-      setContacts(prev => [...prev, newContact])
-      return true
-    }
-
-    return false
-  }
-
   const handleChatSelect = (userId: string) => {
     setSelectedUserId(userId)
-    // Clear unread count locally for immediate feedback
     setConversations(prev => prev.map(conv => {
-      if (conv.user.id === userId) {
-        return { ...conv, unreadCount: 0 }
-      }
+      if (conv.user.id === userId) return { ...conv, unreadCount: 0 }
       return conv
     }))
   }
@@ -635,28 +233,23 @@ export default function Home() {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />
   }
 
+  const conversationsWithPresence = conversations.map(conv => ({
+    ...conv,
+    user: { ...conv.user, isOnline: onlineUserIds.includes(conv.user.id) }
+  }))
+
+  const contactsWithPresence = contacts.map(contact => ({
+    ...contact,
+    isOnline: onlineUserIds.includes(contact.id)
+  }))
+
   return (
     <main className="h-dvh w-full max-w-md mx-auto flex flex-col overflow-hidden shadow-2xl relative">
-      {/* Background Image Layer */}
-      <div className="absolute inset-0 -z-10 bg-zinc-950 pointer-events-none">
-        <Image
-          src="/images/onboarding-bg.png"
-          alt=""
-          fill
-          className="object-cover opacity-20"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/40 via-background/20 to-background" />
-      </div>
-
       <AnimatePresence>
         {selectedUserId && selectedUser ? (
           <motion.div
             key="chat-view"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             className="absolute inset-0 z-50 bg-background"
           >
             <ChatView
@@ -666,165 +259,68 @@ export default function Home() {
             />
           </motion.div>
         ) : (
-          <motion.div
-            key="main-content"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex-1 overflow-hidden"
-          >
+          <motion.div key="main-content" className="flex-1 overflow-hidden">
             {activeTab === 'chats' && (
               <ConversationList
                 conversations={conversationsWithPresence}
                 onSelectConversation={handleChatSelect}
-                currentUser={currentUserWithPresence as CurrentUser}
+                currentUser={user as CurrentUser}
                 onUpdateUser={setUser}
                 onLogout={handleLogout}
                 contacts={contactsWithPresence}
-                onAddContact={handleAddContact}
-                onCreateGroup={handleCreateGroup}
-                onAcceptInvite={handleAcceptInvite}
-                onRejectInvite={handleRejectInvite}
-                onDeleteConversation={handleDeleteConversation}
-                typingUserIds={typingToMe}
+                onAddContact={async (nick) => {
+                  const { addContact } = await import('@/lib/supabase/contacts')
+                  const { data } = await addContact(user.id, nick)
+                  if (data) { setContacts(prev => [...prev, data]); return true; }
+                  return false;
+                }}
                 onOpenSettings={() => setShowSettings(true)}
-                onOpenWallet={() => setShowWallet(true)}
               />
             )}
             {activeTab === 'discover' && (
-              <DiscoverView
-                onSelectUser={(userId) => {
-                  setSelectedUserId(userId)
-                }}
-                currentUser={user as CurrentUser}
-              />
-            )}
-            {activeTab === 'wallet' && (
-              <div className="flex-1 h-full flex flex-col items-center justify-center text-muted-foreground p-10 text-center gap-4">
-                <Wallet className="w-16 h-16 opacity-20" />
-                <div className="space-y-2">
-                  <h3 className="text-lg font-black uppercase tracking-widest text-foreground">Sua Carteira</h3>
-                  <p className="text-sm">Acesse o painel financeiro para gerenciar seus tokens e saques.</p>
-                </div>
-                <Button onClick={() => setShowWallet(true)}>Abrir Carteira</Button>
-              </div>
+              <DiscoverView onSelectUser={(id) => setSelectedUserId(id)} currentUser={user as CurrentUser} />
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bottom Navigation Bar */}
       {!selectedUserId && (
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-background/80 backdrop-blur-xl border-t border-border/40 px-6 py-3 z-40 flex items-center justify-between pb-safe">
-          <BottomNavItem
-            icon={MessageSquare}
-            label="Chats"
-            isActive={activeTab === 'chats'}
-            onClick={() => setActiveTab('chats')}
-            badge={conversations.some(c => c.unreadCount > 0) ? true : false}
-          />
-          <BottomNavItem
-            icon={Compass}
-            label="Descobrir"
-            isActive={activeTab === 'discover'}
-            onClick={() => setActiveTab('discover')}
-          />
-          <BottomNavItem
-            icon={Wallet}
-            label="Carteira"
-            isActive={activeTab === 'wallet'}
-            onClick={() => setShowWallet(true)}
-          />
-          <BottomNavItem
-            icon={UserIcon}
-            label="Perfil"
-            isActive={activeTab === 'profile'}
-            onClick={() => setShowSettings(true)}
-          />
+          <BottomNavItem icon={MessageSquare} label="Chats" isActive={activeTab === 'chats'} onClick={() => setActiveTab('chats')} badge={conversations.some(c => c.unreadCount > 0)} />
+          <BottomNavItem icon={Compass} label="Descobrir" isActive={activeTab === 'discover'} onClick={() => setActiveTab('discover')} />
+          <BottomNavItem icon={Wallet} label="Carteira" isActive={activeTab === 'wallet'} onClick={() => setShowWallet(true)} />
+          <BottomNavItem icon={UserIcon} label="Perfil" isActive={activeTab === 'profile'} onClick={() => setShowSettings(true)} />
         </nav>
       )}
 
-      {user && (
-        <>
-          <SettingsSheet
-            isOpen={showSettings}
-            onClose={() => setShowSettings(false)}
-            user={user as CurrentUser}
-            onUpdateUser={setUser}
-            onLogout={handleLogout}
-            onOpenAlbum={() => {
-              setShowSettings(false)
-              setShowAlbum(true)
-            }}
-            onOpenWallet={() => {
-              setShowSettings(false)
-              setShowWallet(true)
-            }}
-          />
+      <SettingsSheet
+        isOpen={showSettings} onClose={() => setShowSettings(false)} user={user as CurrentUser}
+        onUpdateUser={setUser} onLogout={handleLogout}
+        onOpenAlbum={() => { setShowSettings(false); setShowAlbum(true); }}
+        onOpenWallet={() => { setShowSettings(false); setShowWallet(true); }}
+      />
 
-          <PhotoAlbum
-            isOpen={showAlbum}
-            onClose={() => setShowAlbum(false)}
-            photos={albumPhotos}
-            onUpdatePhotos={setAlbumPhotos}
-            pendingRequests={[]} // For now empty, can be state later
-            onApproveRequest={() => { }}
-            onRejectRequest={() => { }}
-            onUploadPhoto={async (file) => {
-              const { uploadAlbumPhoto } = await import('@/lib/supabase/album')
-              const { data } = await uploadAlbumPhoto(user.id, file)
-              return data
-            }}
-            onDeletePhoto={async (photoId) => {
-              const { deleteAlbumPhoto } = await import('@/lib/supabase/album')
-              await deleteAlbumPhoto(photoId)
-            }}
-          />
+      <PhotoAlbum
+        isOpen={showAlbum} onClose={() => setShowAlbum(false)} photos={albumPhotos}
+        onUpdatePhotos={setAlbumPhotos}
+        onUploadPhoto={async (f) => { const { uploadAlbumPhoto } = await import('@/lib/supabase/album'); return (await uploadAlbumPhoto(user.id, f)).data; }}
+        onDeletePhoto={async (id) => { const { deleteAlbumPhoto } = await import('@/lib/supabase/album'); await deleteAlbumPhoto(id); }}
+      />
 
-          <WalletView
-            isOpen={showWallet}
-            onClose={() => setShowWallet(false)}
-            currentUser={user as CurrentUser}
-          />
-        </>
-      )}
-
+      <WalletView isOpen={showWallet} onClose={() => setShowWallet(false)} currentUser={user as CurrentUser} />
       <InstallPrompt />
     </main>
   )
 }
 
-function BottomNavItem({
-  icon: Icon,
-  label,
-  isActive,
-  onClick,
-  badge
-}: {
-  icon: any,
-  label: string,
-  isActive: boolean,
-  onClick: () => void,
-  badge?: boolean
-}) {
+function BottomNavItem({ icon: Icon, label, isActive, onClick, badge }: any) {
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex flex-col items-center gap-1 transition-all relative active:scale-90",
-        isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-      )}
-    >
-      <div className={cn(
-        "p-1.5 rounded-xl transition-all",
-        isActive && "bg-primary/10"
-      )}>
+    <button onClick={onClick} className={cn("flex flex-col items-center gap-1 transition-all relative active:scale-90", isActive ? "text-primary" : "text-muted-foreground")}>
+      <div className={cn("p-1.5 rounded-xl", isActive && "bg-primary/10")}>
         <Icon className={cn("w-6 h-6", isActive && "fill-current")} />
       </div>
       <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
-      {badge && (
-        <span className="absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full border border-background animate-pulse" />
-      )}
+      {badge && <span className="absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
     </button>
   )
 }

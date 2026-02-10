@@ -30,7 +30,22 @@ export async function getDiscoverUsers(currentUserId: string, limit = 20): Promi
         if (contactsError) throw contactsError
         const contactIds = new Set(contacts.map((c: any) => c.contact_id))
 
-        // 3. Buscar solicitações pendentes/negadas nas mensagens
+        // 3. Buscar BLOQUEIOS (Quem eu bloqueei e quem me bloqueou)
+        const { data: blocks } = await (supabase
+            .from('blocked_users') as any)
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${currentUserId},blocked_id.eq.${currentUserId}`)
+
+        const restrictedUserIds = new Set<string>()
+        if (blocks) {
+            blocks.forEach((b: any) => {
+                restrictedUserIds.add(b.blocker_id)
+                restrictedUserIds.add(b.blocked_id)
+            })
+            restrictedUserIds.delete(currentUserId)
+        }
+
+        // 4. Buscar solicitações pendentes nas mensagens
         const { data: requests, error: requestsError } = await (supabase
             .from('messages') as any)
             .select('receiver_id, metadata')
@@ -38,33 +53,36 @@ export async function getDiscoverUsers(currentUserId: string, limit = 20): Promi
             .eq('type', 'request')
             .filter('metadata->>requestType', 'eq', 'chat')
 
-        if (requestsError) throw requestsError
         const requestMap = new Map()
-        requests.forEach((r: any) => {
-            requestMap.set(r.receiver_id, r.metadata?.status || 'pending')
-        })
+        if (!requestsError && requests) {
+            requests.forEach((r: any) => {
+                requestMap.set(r.receiver_id, r.metadata?.status || 'pending')
+            })
+        }
 
-        // 4. Mapear status para cada usuário
-        const formattedUsers = users.map((u: any) => {
-            let status: 'none' | 'pending' | 'accepted' | 'declined' = 'none'
+        // 5. Mapear status e FILTRAR BLOQUEADOS
+        const formattedUsers = users
+            .filter((u: any) => !restrictedUserIds.has(u.id))
+            .map((u: any) => {
+                let status: 'none' | 'pending' | 'accepted' | 'declined' = 'none'
 
-            if (contactIds.has(u.id)) {
-                status = 'accepted'
-            } else if (requestMap.has(u.id)) {
-                status = requestMap.get(u.id)
-            }
+                if (contactIds.has(u.id)) {
+                    status = 'accepted'
+                } else if (requestMap.has(u.id)) {
+                    status = requestMap.get(u.id)
+                }
 
-            return {
-                id: u.id,
-                name: u.name,
-                nickname: u.nickname,
-                avatar: u.profile_photo || u.avatar || '',
-                coverPhoto: u.cover_photo,
-                isOnline: u.is_online,
-                wallet_balance: u.wallet_balance,
-                relationship: status
-            }
-        })
+                return {
+                    id: u.id,
+                    name: u.name,
+                    nickname: u.nickname,
+                    avatar: u.profile_photo || u.avatar || '',
+                    coverPhoto: u.cover_photo,
+                    isOnline: u.is_online,
+                    wallet_balance: u.wallet_balance,
+                    relationship: status
+                }
+            })
 
         return { data: formattedUsers, error: null }
     } catch (error: any) {

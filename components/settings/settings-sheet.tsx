@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 import type { CurrentUser } from '@/lib/types'
 import Image from 'next/image'
 import { toast } from 'sonner'
+import { getBlockedUsersDetailed, unblockUser } from '@/lib/supabase/blocking'
 
 interface SettingsSheetProps {
   isOpen: boolean
@@ -75,6 +76,33 @@ export function SettingsSheet({
   const [editName, setEditName] = useState(user.name)
   const [editNickname, setEditNickname] = useState(user.nickname)
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
+
+  // Blocked users detailed list
+  const [blockedUsersDetailed, setBlockedUsersDetailed] = useState<any[]>([])
+  const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
+
+  const loadBlockedUsers = async () => {
+    setIsLoadingBlocks(true)
+    const data = await getBlockedUsersDetailed(user.id)
+    setBlockedUsersDetailed(data)
+    setIsLoadingBlocks(false)
+  }
+
+  const handleUnblock = async (blockedId: string, nickname: string) => {
+    const { error } = await unblockUser(user.id, blockedId)
+    if (error) {
+      toast.error('Erro ao desbloquear')
+    } else {
+      toast.success(`@${nickname} desbloqueado`)
+      setBlockedUsersDetailed(prev => prev.filter(u => u.id !== blockedId))
+    }
+  }
+
+  React.useEffect(() => {
+    if (activeSubView === 'blocked') {
+      loadBlockedUsers()
+    }
+  }, [activeSubView])
 
   const handleNotificationChange = async (key: keyof typeof notifications, value: boolean) => {
     const newNotifs = { ...notifications, [key]: value }
@@ -295,12 +323,49 @@ export function SettingsSheet({
 
         {activeSubView === 'blocked' && (
           <SubViewContainer title="Usuários Bloqueados" onBack={() => setActiveSubView(null)}>
-            <div className="p-10 text-center space-y-4">
-              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto opacity-20">
-                <Ban className="w-10 h-10" />
+            {isLoadingBlocks ? (
+              <div className="p-20 flex flex-col items-center gap-4">
+                <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Carregando...</p>
               </div>
-              <p className="text-sm text-muted-foreground font-medium">Nenhum usuário bloqueado no momento.</p>
-            </div>
+            ) : blockedUsersDetailed.length === 0 ? (
+              <div className="p-20 text-center space-y-4">
+                <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto opacity-20">
+                  <Ban className="w-10 h-10" />
+                </div>
+                <p className="text-sm text-muted-foreground font-medium">Nenhum usuário bloqueado no momento.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {blockedUsersDetailed.map((u) => (
+                  <div key={u.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/5 overflow-hidden relative">
+                        {u.avatar ? (
+                          <Image src={u.avatar} alt={u.nickname} fill className="object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-zinc-700" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">@{u.nickname}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">Bloqueado em {new Date(u.blockedAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+                      onClick={() => handleUnblock(u.id, u.nickname)}
+                    >
+                      Desbloquear
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </SubViewContainer>
         )}
 
