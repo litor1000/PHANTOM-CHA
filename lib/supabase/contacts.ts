@@ -36,10 +36,12 @@ export async function addContact(userId: string, contactNickname: string): Promi
             })
 
         if (insertError) {
-            if (insertError.code === '23505') { // Unique violation
-                return { data: null, error: 'Contato já adicionado' }
+            if (insertError.code === '23505') { // Unique violation - já é contato
+                // Não retorna erro, apenas segue para buscar os dados e retornar sucesso
+                console.log('Contato já existe, retornando sucesso...')
+            } else {
+                return { data: null, error: insertError.message }
             }
-            return { data: null, error: insertError.message }
         }
 
         // 3. Retornar dados do usuário adicionado

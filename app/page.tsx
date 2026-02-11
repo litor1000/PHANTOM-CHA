@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { ConversationList } from '@/components/chat/conversation-list'
 import { ChatView } from '@/components/chat/chat-view'
@@ -29,8 +29,8 @@ export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [user, setUser] = useState<CurrentUser | null>(null)
 
-  // Registrar Push Notifications quando o usuário estiver logado
   usePushNotifications(user?.id)
+
   const [isLoading, setIsLoading] = useState(true)
   const [isLocked, setIsLocked] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -46,10 +46,7 @@ export default function Home() {
     conversations.find(c => c.user.id === selectedUserId)?.user ||
     contacts.find(c => c.id === selectedUserId)
 
-  const [isContact, setIsContact] = useState(false)
-  const [isPendingRequest, setIsPendingRequest] = useState(false)
-
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user?.id || user.id === 'current-user') return
     const { getUserConversations } = await import('@/lib/supabase/messages')
     // @ts-ignore
@@ -68,9 +65,9 @@ export default function Home() {
         return finalData
       })
     }
-  }
+  }, [user?.id])
 
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     if (!user?.id || user.id === 'current-user') return
     const { getContacts } = await import('@/lib/supabase/contacts')
     const { data: dbContacts } = await getContacts(user.id)
@@ -78,41 +75,72 @@ export default function Home() {
       setContacts(dbContacts)
       localStorage.setItem(`phantom-contacts-${user.id}`, JSON.stringify(dbContacts))
     }
-  }
+  }, [user?.id])
 
   // Check for existing user session
   useEffect(() => {
-    const loadUser = async () => {
-      const supabaseUser = await getCurrentUser()
-      if (supabaseUser) {
-        setUser(supabaseUser)
+    const loadInitialData = async () => {
+      // 1. Tentar carregamento imediato do localStorage para UX rápida
+      const savedUser = localStorage.getItem('phantom-user')
+      if (savedUser) {
         try {
-          localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
+          const parsedUser = JSON.parse(savedUser)
+          setUser(parsedUser)
+          setIsLoading(false) // Esconde o spinner imediatamente se tivermos dados locais
         } catch (e) {
-          console.warn('Quota exceeded for phantom-user, trying to clear old messages...')
-        }
-
-        const savedContacts = localStorage.getItem(`phantom-contacts-${supabaseUser.id}`)
-        if (savedContacts) {
-          try { setContacts(JSON.parse(savedContacts)) } catch { }
-        }
-
-        const { getUserAlbum } = await import('@/lib/supabase/album')
-        const { data: albumData } = await getUserAlbum(supabaseUser.id)
-        if (albumData) setAlbumPhotos(albumData)
-      } else {
-        const savedUser = localStorage.getItem('phantom-user')
-        if (savedUser) {
-          try {
-            const parsedUser = JSON.parse(savedUser)
-            setUser(parsedUser)
-          } catch {
-            localStorage.removeItem('phantom-user')
-          }
+          localStorage.removeItem('phantom-user')
         }
       }
 
-      setIsLoading(false)
+      // 2. Buscar dados frescos do servidor em paralelo
+      try {
+        const supabaseUser = await getCurrentUser()
+
+        if (supabaseUser) {
+          setUser(supabaseUser)
+          localStorage.setItem('phantom-user', JSON.stringify(supabaseUser))
+
+          // Buscar extras em paralelo sem bloquear a UI principal
+          const [{ getUserAlbum }, { getContacts }, { getUserConversations }] = await Promise.all([
+            import('@/lib/supabase/album'),
+            import('@/lib/supabase/contacts'),
+            import('@/lib/supabase/messages')
+          ])
+
+          // Disparar fetches mas não precisa travar tudo aqui se já tivermos o básico
+          const [albumRes, contactsRes, convsRes] = await Promise.all([
+            getUserAlbum(supabaseUser.id),
+            getContacts(supabaseUser.id),
+            getUserConversations(supabaseUser.id)
+          ])
+
+          if (albumRes.data) setAlbumPhotos(albumRes.data)
+          if (contactsRes.data) {
+            setContacts(contactsRes.data)
+            localStorage.setItem(`phantom-contacts-${supabaseUser.id}`, JSON.stringify(contactsRes.data))
+          }
+          if (convsRes.data) {
+            setConversations(prev => {
+              const tutorial = prev.find(c => c.id === 'conv-bot-tutorial')
+              const support = prev.find(c => c.id === 'conv-bot-support')
+              let finalData = convsRes.data.filter((c: any) =>
+                c.id !== 'conv-bot-tutorial' &&
+                c.id !== 'conv-bot-support'
+              )
+              if (support) finalData = [support, ...finalData]
+              if (tutorial) finalData = [tutorial, ...finalData]
+              return finalData
+            })
+          }
+        } else {
+          setUser(null)
+          localStorage.removeItem('phantom-user')
+        }
+      } catch (error) {
+        console.error('Erro no carregamento inicial:', error)
+      } finally {
+        setIsLoading(false) // Garante que o spinner suma mesmo se houver erro
+      }
 
       // Listen for events
       const handleTutorialComplete = () => {
@@ -135,14 +163,14 @@ export default function Home() {
         window.removeEventListener('open-support-chat', handleOpenSupport)
       }
     }
-    loadUser()
+    loadInitialData()
   }, [])
 
   // Realtime and Poll
   useEffect(() => {
-    if (!user || !user.id || user.id === 'current-user') return
+    if (!user || user.id === 'current-user') return
 
-    const refreshAllData = async () => {
+    const refreshAllData = () => {
       fetchConversations()
       fetchContacts()
     }
@@ -167,16 +195,15 @@ export default function Home() {
       blockChannel = supabase
         .channel('public:blocked_users_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users' }, (payload: any) => {
-          const isMe = payload.new?.blocker_id === user.id || payload.new?.blocked_id === user.id ||
-            payload.old?.blocker_id === user.id || payload.old?.blocked_id === user.id
-          if (isMe) {
-            refreshAllData()
-            if (payload.eventType === 'INSERT') {
-              const otherId = payload.new.blocker_id === user.id ? payload.new.blocked_id : payload.new.blocker_id
-              if (selectedUserId === otherId) {
-                setSelectedUserId(null)
-                toast.info('Essa conversa não está mais disponível.')
-              }
+          // Refresca se houver qualquer mudança nos bloqueios que envolva o usuário
+          refreshAllData()
+
+          if (payload.eventType === 'INSERT') {
+            const b = payload.new
+            const otherId = b.blocker_id === user.id ? b.blocked_id : b.blocker_id
+            if (selectedUserId === otherId) {
+              setSelectedUserId(null)
+              toast.info('Essa conversa não está mais disponível.')
             }
           }
         })
@@ -188,10 +215,9 @@ export default function Home() {
       if (msgChannel) msgChannel.unsubscribe()
       if (blockChannel) blockChannel.unsubscribe()
     }
-  }, [user?.id, selectedUserId])
+  }, [user?.id, selectedUserId, fetchConversations, fetchContacts])
 
   const handleOnboardingComplete = async (userData: UserFormData) => {
-    // Implementação simplificada para restaurar fluxo
     const currentUserData = await getCurrentUser()
     if (currentUserData) {
       setUser(currentUserData)
@@ -275,6 +301,7 @@ export default function Home() {
                   return false;
                 }}
                 onOpenSettings={() => setShowSettings(true)}
+                onOpenWallet={() => setShowWallet(true)}
               />
             )}
             {activeTab === 'discover' && (
@@ -296,6 +323,10 @@ export default function Home() {
       <SettingsSheet
         isOpen={showSettings} onClose={() => setShowSettings(false)} user={user as CurrentUser}
         onUpdateUser={setUser} onLogout={handleLogout}
+        onUnblock={() => {
+          fetchConversations()
+          fetchContacts()
+        }}
         onOpenAlbum={() => { setShowSettings(false); setShowAlbum(true); }}
         onOpenWallet={() => { setShowSettings(false); setShowWallet(true); }}
       />
@@ -303,6 +334,9 @@ export default function Home() {
       <PhotoAlbum
         isOpen={showAlbum} onClose={() => setShowAlbum(false)} photos={albumPhotos}
         onUpdatePhotos={setAlbumPhotos}
+        pendingRequests={[]}
+        onApproveRequest={() => { }}
+        onRejectRequest={() => { }}
         onUploadPhoto={async (f) => { const { uploadAlbumPhoto } = await import('@/lib/supabase/album'); return (await uploadAlbumPhoto(user.id, f)).data; }}
         onDeletePhoto={async (id) => { const { deleteAlbumPhoto } = await import('@/lib/supabase/album'); await deleteAlbumPhoto(id); }}
       />

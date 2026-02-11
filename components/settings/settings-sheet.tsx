@@ -48,6 +48,7 @@ interface SettingsSheetProps {
   onLogout: () => void
   onOpenAlbum: () => void
   onOpenWallet: () => void
+  onUnblock?: () => void
 }
 
 export function SettingsSheet({
@@ -58,6 +59,7 @@ export function SettingsSheet({
   onLogout,
   onOpenAlbum,
   onOpenWallet,
+  onUnblock,
 }: SettingsSheetProps) {
   const [isOnline, setIsOnline] = useState(user.isOnline ?? true)
   const profileInputRef = useRef<HTMLInputElement>(null)
@@ -95,6 +97,7 @@ export function SettingsSheet({
     } else {
       toast.success(`@${nickname} desbloqueado`)
       setBlockedUsersDetailed(prev => prev.filter(u => u.id !== blockedId))
+      if (onUnblock) onUnblock()
     }
   }
 
